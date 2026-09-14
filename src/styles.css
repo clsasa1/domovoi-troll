@@ -28,3 +28,10 @@
 .messages-scroll{padding-top:18px}.composer{padding-bottom:12px}
 .theme-light{color-scheme:light}
 @media (max-width:1100px){.sidebar{width:280px;flex-basis:280px}.messages-scroll,.composer{padding-left:5%;padding-right:5%}}
+.sidebar-header,.conversation-header,.sidebar-footer,.composer-row{position:relative}
+.context-menu{position:absolute;z-index:10;min-width:190px;padding:5px;border:1px solid #343538;border-radius:9px;background:#202123;box-shadow:0 8px 24px #0006}
+.context-menu button{width:100%;display:flex;align-items:center;gap:9px;padding:9px 10px;border-radius:6px;color:#e7e8ea;background:transparent;text-align:left;font-size:13px}
+.context-menu button:hover{background:#303133}.context-menu button.danger{color:#f06b73}
+.settings-menu{top:45px;right:10px}.header-menu{top:52px;right:12px}.profile-menu{right:10px;bottom:55px}.attachment-menu{left:5px;bottom:48px}
+.toast{position:fixed;z-index:20;left:50%;bottom:24px;transform:translateX(-50%);padding:10px 16px;border-radius:8px;color:#fff;background:#303133;box-shadow:0 4px 16px #0005;font-size:13px}
+.theme-light .context-menu{border-color:#d5d8dc;background:#fff;box-shadow:0 8px 24px #0002}.theme-light .context-menu button{color:#25282b}.theme-light .context-menu button:hover{background:#f0f2f4}
