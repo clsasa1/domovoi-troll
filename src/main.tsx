@@ -11,7 +11,6 @@ import {
   MoreHorizontal,
   Paperclip,
   Pencil,
-  Pin,
   Plus,
   UserPlus,
   Trash2,
@@ -42,6 +41,7 @@ type Message = {
   mine?: boolean
   reactions?: string
   attachment?: boolean
+  replyTo?: { author: string; text: string }
 }
 
 const avatarByName: Record<string, string> = Object.fromEntries(
@@ -133,7 +133,7 @@ function loadPersistedChatState(): PersistedChatState {
       return { chats: initialChats, messagesByChat: chatMessages }
     }
     return {
-      chats: parsed.chats.map((chat) => ({ ...chat, image: chatLogoById[chat.id] ?? chat.image })),
+      chats: parsed.chats.map((chat) => ({ ...chat, unread: 0, image: chatLogoById[chat.id] ?? chat.image })),
       messagesByChat: parsed.messagesByChat,
     } as PersistedChatState
   } catch {
@@ -142,7 +142,7 @@ function loadPersistedChatState(): PersistedChatState {
 }
 
 function Avatar({ initials, color, online = false, large = false, image, system = false }: { initials: string; color: string; online?: boolean; large?: boolean; image?: string; system?: boolean }) {
-  return <span className={`avatar avatar-${color} ${large ? 'avatar-large' : ''} ${image ? 'avatar-photo' : ''} ${system ? 'avatar-system' : ''}`} style={image ? { backgroundImage: `url("${image}")` } : undefined}>{system ? <Bot size={16} /> : !image && initials}{online && <i className="online-dot" />}</span>
+  return <span className={`avatar avatar-${color} ${large ? 'avatar-large' : ''} ${image ? 'avatar-photo' : ''} ${system ? 'avatar-system' : ''}`}>{system ? <Bot size={16} /> : <>{initials}{image && <img src={image} alt="" onError={(event) => { event.currentTarget.style.display = 'none' }} />}</>}{online && <i className="online-dot" />}</span>
 }
 
 function messageAvatar(message: Message): string | undefined {
@@ -181,7 +181,7 @@ function App() {
   const [metrics, setMetrics] = useState({ tension: 0, suspicion: 0 })
   const [gameOver, setGameOver] = useState<string>()
   const [openMenu, setOpenMenu] = useState<MenuName>(null)
-  const [pinnedVisible, setPinnedVisible] = useState(true)
+  const [replyTo, setReplyTo] = useState<Message>()
   const [notificationsEnabled, setNotificationsEnabled] = useState(true)
   const [conversationQuery, setConversationQuery] = useState('')
   const [toast, setToast] = useState('')
@@ -254,12 +254,17 @@ function App() {
     const text = draft.trim()
     const chatId = selectedChatId
     if (!text || gameOver) return
-    setMessagesByChat((current) => ({ ...current, [selectedChatId]: [...(current[selectedChatId] ?? []), { id: Date.now(), author: 'Вы', initials: 'ВЫ', color: 'green', text, time: 'сейчас', mine: true }] }))
+    const reply = replyTo
+    setMessagesByChat((current) => ({ ...current, [selectedChatId]: [...(current[selectedChatId] ?? []), { id: Date.now(), author: 'Вы', initials: 'ВЫ', color: 'green', text, time: 'сейчас', mine: true, replyTo: reply ? { author: reply.author, text: reply.text } : undefined }] }))
     setDraft('')
+    setReplyTo(undefined)
     try {
+      const controller = new AbortController()
+      const timeoutId = window.setTimeout(() => controller.abort(), 20_000)
       const response = await fetch('/domovoi/api/chat/action', {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
+        signal: controller.signal,
         body: JSON.stringify({
           recentMessages: messages.slice(-15).map((message) => ({
             id: String(message.id),
@@ -269,8 +274,9 @@ function App() {
           currentTension: metrics.tension,
           currentSuspicion: metrics.suspicion,
           lastPlayerMessage: text,
+          replyToMessageId: reply ? String(reply.id) : null,
         }),
-      })
+      }).finally(() => window.clearTimeout(timeoutId))
       if (!response.ok) throw new Error('Game API request failed')
       const result = await response.json() as ActionResponse
       setMetrics((current) => ({
@@ -282,7 +288,8 @@ function App() {
       setTypingActor(undefined)
       setMessagesByChat((current) => ({ ...current, [chatId]: [...(current[chatId] ?? []), { id: Date.now() + Math.random(), author: result.actorName, initials: result.actorName.slice(0, 2).toUpperCase(), color: 'blue', text: result.messageText, time: 'сейчас' }] }))
     } catch {
-      setMessagesByChat((current) => ({ ...current, [selectedChatId]: [...(current[selectedChatId] ?? []), { id: Date.now(), author: 'Система', initials: '!', color: 'amber', text: 'Сервер не ответил. Попробуйте ещё раз.', time: 'сейчас' }] }))
+      setTypingActor(undefined)
+      notify('Сервер не ответил. Попробуйте ещё раз.')
     }
   }
 
@@ -338,7 +345,7 @@ function App() {
           {visibleChats.map((chat) => (
             <button className={`chat-card ${selectedChatId === chat.id ? 'chat-card-active' : ''}`} key={chat.id} onClick={() => selectChat(chat.id)}>
               <div className={`building-avatar building-${chat.color} ${chat.image ? 'building-photo' : ''}`}>
-                {chat.image ? <img src={chat.image} alt={`Логотип ${chat.title}`} /> : <><div className="building-roof" /><div className="building-windows">▪▪<br />▪▪</div></>}
+                {chat.image ? <img src={chat.image} alt={`Логотип ${chat.title}`} onError={(event) => { event.currentTarget.style.display = 'none' }} /> : <><div className="building-roof" /><div className="building-windows">▪▪<br />▪▪</div></>}
               </div>
               <div className="chat-card-content">
                 <div className="chat-card-title"><strong>{chat.title}</strong><time>{chat.time}</time></div>
@@ -355,7 +362,7 @@ function App() {
       <section className="conversation">
         <header className="conversation-header">
           <div className="conversation-title"><div className={`building-avatar small building-${selectedChat.color} ${selectedChat.image ? 'building-photo' : ''}`}>{selectedChat.image ? <img src={selectedChat.image} alt={`Логотип ${selectedChat.title}`} /> : <><div className="building-roof" /><div className="building-windows">▪▪<br />▪▪</div></>}</div><div><h1>{selectedChat.title}</h1><p><span className="online-text">●</span> 42 участника, 6 онлайн</p></div></div>
-          <div className="header-actions"><button className={`icon-button ${infoOpen ? 'selected' : ''}`} aria-label="Участники чата" onClick={() => setInfoOpen(!infoOpen)}><Users size={19} /></button><button className={`icon-button ${isSearching ? 'selected' : ''}`} onClick={() => setIsSearching(!isSearching)} aria-label="Поиск по диалогу"><Search size={20} /></button><button className={`icon-button ${notificationsEnabled ? '' : 'selected'}`} aria-label="Уведомления" onClick={() => { setNotificationsEnabled(!notificationsEnabled); notify(notificationsEnabled ? 'Уведомления выключены' : 'Уведомления включены') }}>{notificationsEnabled ? <Bell size={20} /> : <BellOff size={20} />}</button><button className={`icon-button ${openMenu === 'header' ? 'selected' : ''}`} aria-label="Меню чата" onClick={() => setOpenMenu(openMenu === 'header' ? null : 'header')}><MoreHorizontal size={21} /></button>{openMenu === 'header' && <div className="context-menu header-menu"><strong>Меню чата</strong><button onClick={() => { setSettingsOpen(true); setOpenMenu(null) }}><Settings size={16} /> Настройки игры</button><button onClick={() => { setOpenMenu(null); notify('Чат добавлен в архив') }}><Archive size={16} /> Архивировать</button><button onClick={() => setPinnedVisible(!pinnedVisible)}><Pin size={16} /> {pinnedVisible ? 'Скрыть закрепление' : 'Показать закрепление'}</button><button className="danger" onClick={() => leaveChat(selectedChatId)}><LogOut size={16} /> Выйти из чата</button><button className="danger" onClick={() => { setMessagesByChat((current) => ({ ...current, [selectedChatId]: [] })); setOpenMenu(null); notify('История чата очищена') }}><Trash2 size={16} /> Удалить историю</button></div>}</div>
+          <div className="header-actions"><button className={`icon-button ${infoOpen ? 'selected' : ''}`} aria-label="Участники чата" onClick={() => setInfoOpen(!infoOpen)}><Users size={19} /></button><button className={`icon-button ${isSearching ? 'selected' : ''}`} onClick={() => setIsSearching(!isSearching)} aria-label="Поиск по диалогу"><Search size={20} /></button><button className={`icon-button ${notificationsEnabled ? '' : 'selected'}`} aria-label="Уведомления" onClick={() => { setNotificationsEnabled(!notificationsEnabled); notify(notificationsEnabled ? 'Уведомления выключены' : 'Уведомления включены') }}>{notificationsEnabled ? <Bell size={20} /> : <BellOff size={20} />}</button><button className={`icon-button ${openMenu === 'header' ? 'selected' : ''}`} aria-label="Меню чата" onClick={() => setOpenMenu(openMenu === 'header' ? null : 'header')}><MoreHorizontal size={21} /></button>{openMenu === 'header' && <div className="context-menu header-menu"><strong>Меню чата</strong><button onClick={() => { setSettingsOpen(true); setOpenMenu(null) }}><Settings size={16} /> Настройки игры</button><button onClick={() => { setOpenMenu(null); notify('Чат добавлен в архив') }}><Archive size={16} /> Архивировать</button><button className="danger" onClick={() => leaveChat(selectedChatId)}><LogOut size={16} /> Выйти из чата</button><button className="danger" onClick={() => { setMessagesByChat((current) => ({ ...current, [selectedChatId]: [] })); setOpenMenu(null); notify('История чата очищена') }}><Trash2 size={16} /> Удалить историю</button></div>}</div>
         </header>
         {isSearching && <div className="conversation-search"><Search size={16} /><input autoFocus value={conversationQuery} onChange={(event) => setConversationQuery(event.target.value)} placeholder="Поиск в переписке" /><button onClick={() => { setIsSearching(false); setConversationQuery('') }} aria-label="Закрыть поиск"><X size={16} /></button></div>}
         <div className="messages-scroll">
@@ -367,17 +374,16 @@ function App() {
                 <div className="message-body">
                   {!message.mine && (index === 0 || visibleMessages[index - 1]?.author !== message.author) && <div className="message-author">{message.author}</div>}
                   {message.attachment && <div className="attachment-card"><div className="attachment-icon"><FileText size={20} /></div><div><strong>Акт выполненных работ</strong><small>PDF · 1,2 МБ</small></div><button onClick={() => notify('Действия файла открыты')} aria-label="Действия файла"><ChevronDown size={17} /></button></div>}
-                  <div className="bubble-wrap"><div className="bubble">{message.text}</div>{!message.mine && <button className="message-reaction-trigger" onClick={() => setReactionMessageId(reactionMessageId === message.id ? undefined : message.id)} aria-label="Поставить реакцию">☺</button>}{reactionMessageId === message.id && <div className="message-reaction-picker">{messageReactions.map((reaction) => <button key={reaction} onClick={() => { setMessagesByChat((current) => ({ ...current, [selectedChatId]: (current[selectedChatId] ?? []).map((item) => item.id === message.id ? { ...item, reactions: `${reaction} 1` } : item) })); setReactionMessageId(undefined) }} aria-label={`Поставить реакцию ${reaction}`}>{reaction}</button>)}</div>}</div>
+                  <div className="bubble-wrap">{message.replyTo && <div className="message-quote"><strong>{message.replyTo.author}</strong>{message.replyTo.text}</div>}<div className="bubble">{message.text}</div><button className="message-reply-trigger" onClick={() => setReplyTo(message)} aria-label={`Ответить ${message.author}`}>Ответить</button>{!message.mine && <button className="message-reaction-trigger" onClick={() => setReactionMessageId(reactionMessageId === message.id ? undefined : message.id)} aria-label="Поставить реакцию">☺</button>}{reactionMessageId === message.id && <div className="message-reaction-picker">{messageReactions.map((reaction) => <button key={reaction} onClick={() => { setMessagesByChat((current) => ({ ...current, [selectedChatId]: (current[selectedChatId] ?? []).map((item) => item.id === message.id ? { ...item, reactions: `${reaction} 1` } : item) })); setReactionMessageId(undefined) }} aria-label={`Поставить реакцию ${reaction}`}>{reaction}</button>)}</div>}</div>
                   <div className="message-meta">{message.time} {message.mine && <CheckCheck size={15} />} {message.reactions && <span className="reaction">{message.reactions}</span>}</div>
                 </div>
               </div>
             ))}
           </div>
-          {selectedChat.unread > 0 && <div className="unread-divider"><span>{selectedChat.unread} непрочитанных сообщения</span></div>}
           {typingActor && <div className="typing"><Avatar initials={typingActor.slice(0, 2).toUpperCase()} color="violet" image={avatarByName[typingActor]} /><span>{typingActor} печатает</span><i /><i /><i /></div>}
         </div>
         <footer className="composer">
-          {pinnedVisible && <div className="pinned-note"><Pin size={14} fill="currentColor" /><span><strong>Закреплено</strong> Правила дома и контакты управляющей компании</span><button onClick={() => setPinnedVisible(false)} aria-label="Скрыть закреплённое сообщение"><X size={14} /></button></div>}
+          {replyTo && <div className="reply-note"><span><strong>Ответ для {replyTo.author}</strong>{replyTo.text}</span><button onClick={() => setReplyTo(undefined)} aria-label="Отменить ответ"><X size={14} /></button></div>}
           <div className="composer-row"><button className="icon-button" aria-label="Прикрепить" onClick={() => setOpenMenu(openMenu === 'attachment' ? null : 'attachment')}><Paperclip size={21} /></button>{openMenu === 'attachment' && <div className="context-menu attachment-menu"><button onClick={() => notify('Выберите фотографию для отправки')}><Image size={16} /> Фото</button><button onClick={() => notify('Выберите файл для отправки')}><FileText size={16} /> Файл</button><button onClick={() => notify('Опрос создан')}><Plus size={16} /> Опрос</button></div>}<textarea disabled={Boolean(gameOver)} value={draft} onChange={(event) => setDraft(event.target.value)} onKeyDown={(event) => { if (event.key === 'Enter' && !event.shiftKey) { event.preventDefault(); void sendMessage() } }} placeholder={gameOver ?? 'Написать сообщение...'} rows={1} /><button className={`icon-button ${emojiOpen ? 'selected' : ''}`} aria-label="Смайлики" onClick={() => setEmojiOpen(!emojiOpen)}><Smile size={21} /></button>{emojiOpen && <div className="emoji-picker">{popularEmojis.map((emoji) => <button key={emoji} onClick={() => { setDraft((current) => `${current}${current ? ' ' : ''}${emoji}`); setEmojiOpen(false) }} aria-label={`Добавить ${emoji}`}>{emoji}</button>)}</div>}<button className={`send-button ${draft.trim() ? 'send-button-active' : ''}`} onClick={() => void sendMessage()} aria-label="Отправить"><Send size={19} /></button></div>
           <div className="composer-tools"><span>Enter — отправить</span><div><button aria-label="Добавить фото" onClick={() => notify('Выберите фотографию для отправки')}><Image size={16} /></button><button aria-label="Добавить геолокацию" onClick={() => notify('Геолокация добавлена к сообщению')}><MapPin size={16} /></button><button aria-label="Голосовое сообщение" onClick={() => notify('Запись голосового сообщения началась')}><Volume2 size={16} /></button></div></div>
         </footer>
