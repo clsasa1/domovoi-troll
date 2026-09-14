@@ -155,7 +155,7 @@ function App() {
 
   const visibleChats = useMemo(
     () => chats.filter((chat) => `${chat.title} ${chat.preview}`.toLowerCase().includes(search.toLowerCase())),
-    [search],
+    [chats, search],
   )
   const visibleMessages = useMemo(
     () => messages.filter((message) => message.text.toLowerCase().includes(conversationQuery.toLowerCase())),
@@ -167,8 +167,12 @@ function App() {
   }, [theme])
 
   useEffect(() => {
-    setChats((current) => current.map((chat) => chat.id === selectedChatId ? { ...chat, unread: 0 } : chat))
-  }, [])
+    setChats((current) => {
+      const selected = current.find((chat) => chat.id === selectedChatId)
+      if (!selected || selected.unread === 0) return current
+      return current.map((chat) => chat.id === selectedChatId ? { ...chat, unread: 0 } : chat)
+    })
+  }, [selectedChatId])
 
   const notify = (text: string) => {
     setToast(text)
@@ -273,7 +277,7 @@ function App() {
               </div>
             ))}
           </div>
-          <div className="unread-divider"><span>2 непрочитанных сообщения</span></div>
+          {selectedChat.unread > 0 && <div className="unread-divider"><span>{selectedChat.unread} непрочитанных сообщения</span></div>}
           {typingActor && <div className="typing"><Avatar initials={typingActor.slice(0, 2).toUpperCase()} color="violet" /><span>{typingActor} печатает</span><i /><i /><i /></div>}
         </div>
         <footer className="composer">
