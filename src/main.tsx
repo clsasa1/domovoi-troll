@@ -108,6 +108,8 @@ function Avatar({ initials, color, online = false, large = false }: { initials: 
   return <span className={`avatar avatar-${color} ${large ? 'avatar-large' : ''}`}>{initials}<>{online && <i className="online-dot" />}</></span>
 }
 
+const wait = (milliseconds: number) => new Promise<void>((resolve) => window.setTimeout(resolve, milliseconds))
+
 function App() {
   const [theme, setTheme] = useState<'dark' | 'light'>(() => {
     const savedTheme = window.localStorage.getItem('domovoi-theme')
@@ -179,8 +181,49 @@ function App() {
     window.setTimeout(() => setToast(''), 2200)
   }
 
+  const processGameEvents = async (events: GameEvent[], chatId: string) => {
+    for (const event of events) {
+      if (event.type === 'playerMessage') continue
+      if (event.type === 'typing_start') {
+        setTypingActor(event.actorId)
+        await wait(event.delayMs)
+        continue
+      }
+      if (event.type === 'npc_message') {
+        setTypingActor(undefined)
+        setMessagesByChat((current) => ({ ...current, [chatId]: [...(current[chatId] ?? []), { id: Date.now() + Math.random(), author: event.actorId, initials: event.actorId.slice(0, 2).toUpperCase(), color: 'blue', text: event.text, time: 'сейчас' }] }))
+        if (Math.random() > 0.35) {
+          await wait(700 + Math.floor(Math.random() * 1500))
+          setMessagesByChat((current) => {
+            const chatMessages = current[chatId] ?? []
+            const lastMine = [...chatMessages].reverse().findIndex((message) => message.mine)
+            if (lastMine === -1) return current
+            const index = chatMessages.length - 1 - lastMine
+            const message = chatMessages[index]
+            const reactions = message.reactions ? `${message.reactions} · 👍` : '👍 1'
+            return { ...current, [chatId]: chatMessages.map((item, itemIndex) => itemIndex === index ? { ...item, reactions } : item) }
+          })
+        }
+        continue
+      }
+      if (event.type === 'typing_stop') {
+        setTypingActor(undefined)
+        continue
+      }
+      if (event.type === 'system_event' && event.text) {
+        await wait(500 + Math.floor(Math.random() * 900))
+        setMessagesByChat((current) => ({ ...current, [chatId]: [...(current[chatId] ?? []), { id: Date.now() + Math.random(), author: 'Система', initials: '!', color: 'amber', text: event.text!, time: 'сейчас' }] }))
+        continue
+      }
+      if (event.type === 'game_over') {
+        setGameOver(event.status)
+      }
+    }
+  }
+
   const sendMessage = async () => {
     const text = draft.trim()
+    const chatId = selectedChatId
     if (!text || !sessionId || gameOver) return
     setMessagesByChat((current) => ({ ...current, [selectedChatId]: [...(current[selectedChatId] ?? []), { id: Date.now(), author: 'Вы', initials: 'ВЫ', color: 'green', text, time: 'сейчас', mine: true }] }))
     setDraft('')
@@ -199,19 +242,7 @@ function App() {
       if (!response.ok) throw new Error('Game API request failed')
       const result = await response.json() as GameResponse
       setMetrics({ tension: result.state.tension, suspicion: result.state.suspicion })
-      result.events.forEach((event) => {
-        if (event.type === 'typing_start') setTypingActor(event.actorId)
-        if (event.type === 'typing_stop') setTypingActor(undefined)
-        if (event.type === 'npc_message') {
-          setTypingActor(undefined)
-          setMessagesByChat((current) => ({ ...current, [selectedChatId]: [...(current[selectedChatId] ?? []), { id: Date.now() + Math.random(), author: event.actorId, initials: event.actorId.slice(0, 2).toUpperCase(), color: 'blue', text: event.text, time: 'сейчас' }] }))
-        }
-        if (event.type === 'system_event' && event.text) {
-          const systemText = event.text
-          setMessagesByChat((current) => ({ ...current, [selectedChatId]: [...(current[selectedChatId] ?? []), { id: Date.now() + Math.random(), author: 'Система', initials: '!', color: 'amber', text: systemText, time: 'сейчас' }] }))
-        }
-        if (event.type === 'game_over') setGameOver(event.status)
-      })
+      void processGameEvents(result.events, chatId)
     } catch {
       setMessagesByChat((current) => ({ ...current, [selectedChatId]: [...(current[selectedChatId] ?? []), { id: Date.now(), author: 'Система', initials: '!', color: 'amber', text: 'Сервер не ответил. Попробуйте ещё раз.', time: 'сейчас' }] }))
     }
