@@ -81,6 +81,21 @@ const initialMessages: Message[] = [
   { id: 7, author: 'Марина Петрова', initials: 'МП', color: 'rose', text: 'Записала. Передам управляющей компании, пусть посмотрят вентиляционный канал.', time: '10:55', reactions: '👍 3' },
 ]
 
+const chatMessages: Record<string, Message[]> = {
+  north: initialMessages,
+  sunny: [
+    { id: 101, author: 'Илья Кузнецов', initials: 'ИК', color: 'blue', text: 'Лифт опять встал между этажами. Кто-нибудь уже написал в УК?', time: '09:35' },
+    { id: 102, author: 'Наталья Белова', initials: 'НБ', color: 'teal', text: 'Я оставила заявку, обещали прислать мастера до обеда.', time: '09:42', reactions: '😬 2' },
+    { id: 103, author: 'Вы', initials: 'ВЫ', color: 'green', text: 'Главное, чтобы не как в прошлый раз — три дня ждали.', time: '09:45', mine: true },
+  ],
+  parking: [
+    { id: 201, author: 'Наталья Белова', initials: 'НБ', color: 'teal', text: 'Кто занял гостевое место у третьего подъезда? Номер 417.', time: 'Вчера' },
+    { id: 202, author: 'Марина Петрова', initials: 'МП', color: 'rose', text: 'Давайте без ссор, сначала проверим камеры.', time: 'Вчера' },
+  ],
+}
+
+const popularEmojis = ['🙂', '😂', '👍', '❤️', '🔥', '😡', '😢', '🤔', '👏', '👀']
+
 function Avatar({ initials, color, online = false, large = false }: { initials: string; color: string; online?: boolean; large?: boolean }) {
   return <span className={`avatar avatar-${color} ${large ? 'avatar-large' : ''}`}>{initials}<>{online && <i className="online-dot" />}</></span>
 }
@@ -90,7 +105,7 @@ function App() {
     const savedTheme = window.localStorage.getItem('domovoi-theme')
     return savedTheme === 'light' ? 'light' : 'dark'
   })
-  const [messages, setMessages] = useState(initialMessages)
+  const [messagesByChat, setMessagesByChat] = useState(chatMessages)
   const [draft, setDraft] = useState('')
   const [search, setSearch] = useState('')
   const [isSearching, setIsSearching] = useState(false)
@@ -105,10 +120,12 @@ function App() {
   const [notificationsEnabled, setNotificationsEnabled] = useState(true)
   const [conversationQuery, setConversationQuery] = useState('')
   const [toast, setToast] = useState('')
+  const [emojiOpen, setEmojiOpen] = useState(false)
   const [settingsOpen, setSettingsOpen] = useState(false)
   const [infoOpen, setInfoOpen] = useState(false)
   const [gameOptions, setGameOptions] = useState({ drama: true, autoNoise: true, hardMode: false })
   const selectedChat = chats.find((chat) => chat.id === selectedChatId) ?? chats[0]
+  const messages = messagesByChat[selectedChatId] ?? []
 
   useEffect(() => {
     void fetch('/domovoi/api/game/start', { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: '{}' })
@@ -144,7 +161,7 @@ function App() {
   const sendMessage = async () => {
     const text = draft.trim()
     if (!text || !sessionId || gameOver) return
-    setMessages((current) => [...current, { id: Date.now(), author: 'Вы', initials: 'ВЫ', color: 'green', text, time: 'сейчас', mine: true }])
+    setMessagesByChat((current) => ({ ...current, [selectedChatId]: [...(current[selectedChatId] ?? []), { id: Date.now(), author: 'Вы', initials: 'ВЫ', color: 'green', text, time: 'сейчас', mine: true }] }))
     setDraft('')
     try {
       const response = await fetch('/domovoi/api/game/message', {
@@ -160,16 +177,16 @@ function App() {
         if (event.type === 'typing_stop') setTypingActor(undefined)
         if (event.type === 'npc_message') {
           setTypingActor(undefined)
-          setMessages((current) => [...current, { id: Date.now() + Math.random(), author: event.actorId, initials: event.actorId.slice(0, 2).toUpperCase(), color: 'blue', text: event.text, time: 'сейчас' }])
+          setMessagesByChat((current) => ({ ...current, [selectedChatId]: [...(current[selectedChatId] ?? []), { id: Date.now() + Math.random(), author: event.actorId, initials: event.actorId.slice(0, 2).toUpperCase(), color: 'blue', text: event.text, time: 'сейчас' }] }))
         }
         if (event.type === 'system_event' && event.text) {
           const systemText = event.text
-          setMessages((current) => [...current, { id: Date.now() + Math.random(), author: 'Система', initials: '!', color: 'amber', text: systemText, time: 'сейчас' }])
+          setMessagesByChat((current) => ({ ...current, [selectedChatId]: [...(current[selectedChatId] ?? []), { id: Date.now() + Math.random(), author: 'Система', initials: '!', color: 'amber', text: systemText, time: 'сейчас' }] }))
         }
         if (event.type === 'game_over') setGameOver(event.status)
       })
     } catch {
-      setMessages((current) => [...current, { id: Date.now(), author: 'Система', initials: '!', color: 'amber', text: 'Сервер не ответил. Попробуйте ещё раз.', time: 'сейчас' }])
+      setMessagesByChat((current) => ({ ...current, [selectedChatId]: [...(current[selectedChatId] ?? []), { id: Date.now(), author: 'Система', initials: '!', color: 'amber', text: 'Сервер не ответил. Попробуйте ещё раз.', time: 'сейчас' }] }))
     }
   }
 
@@ -215,7 +232,7 @@ function App() {
       <section className="conversation">
         <header className="conversation-header">
           <div className="conversation-title"><div className={`building-avatar small building-${selectedChat.color}`}><div className="building-roof" /><div className="building-windows">▪▪<br />▪▪</div></div><div><h1>{selectedChat.title}</h1><p><span className="online-text">●</span> 42 участника, 6 онлайн</p></div></div>
-          <div className="header-actions"><button className={`icon-button ${infoOpen ? 'selected' : ''}`} aria-label="Участники чата" onClick={() => setInfoOpen(!infoOpen)}><Users size={19} /></button><button className={`icon-button ${isSearching ? 'selected' : ''}`} onClick={() => setIsSearching(!isSearching)} aria-label="Поиск по диалогу"><Search size={20} /></button><button className={`icon-button ${notificationsEnabled ? '' : 'selected'}`} aria-label="Уведомления" onClick={() => { setNotificationsEnabled(!notificationsEnabled); notify(notificationsEnabled ? 'Уведомления выключены' : 'Уведомления включены') }}>{notificationsEnabled ? <Bell size={20} /> : <BellOff size={20} />}</button><button className="icon-button" aria-label="Меню" onClick={() => setOpenMenu(openMenu === 'header' ? null : 'header')}><MoreHorizontal size={21} /></button>{openMenu === 'header' && <div className="context-menu header-menu"><button onClick={() => { setSettingsOpen(true); setOpenMenu(null) }}><Settings size={16} /> Настройки игры</button><button onClick={() => notify('Чат архивирован')}><Archive size={16} /> Архивировать</button><button onClick={() => setPinnedVisible(!pinnedVisible)}><Pin size={16} /> {pinnedVisible ? 'Скрыть закрепление' : 'Показать закрепление'}</button><button className="danger" onClick={() => { setMessages([]); notify('История чата очищена') }}><Trash2 size={16} /> Очистить историю</button></div>}</div>
+          <div className="header-actions"><button className={`icon-button ${infoOpen ? 'selected' : ''}`} aria-label="Участники чата" onClick={() => setInfoOpen(!infoOpen)}><Users size={19} /></button><button className={`icon-button ${isSearching ? 'selected' : ''}`} onClick={() => setIsSearching(!isSearching)} aria-label="Поиск по диалогу"><Search size={20} /></button><button className={`icon-button ${notificationsEnabled ? '' : 'selected'}`} aria-label="Уведомления" onClick={() => { setNotificationsEnabled(!notificationsEnabled); notify(notificationsEnabled ? 'Уведомления выключены' : 'Уведомления включены') }}>{notificationsEnabled ? <Bell size={20} /> : <BellOff size={20} />}</button><button className="icon-button" aria-label="Меню" onClick={() => setOpenMenu(openMenu === 'header' ? null : 'header')}><MoreHorizontal size={21} /></button>{openMenu === 'header' && <div className="context-menu header-menu"><button onClick={() => { setSettingsOpen(true); setOpenMenu(null) }}><Settings size={16} /> Настройки игры</button><button onClick={() => notify('Чат архивирован')}><Archive size={16} /> Архивировать</button><button onClick={() => setPinnedVisible(!pinnedVisible)}><Pin size={16} /> {pinnedVisible ? 'Скрыть закрепление' : 'Показать закрепление'}</button><button className="danger" onClick={() => { setMessagesByChat((current) => ({ ...current, [selectedChatId]: [] })); notify('История чата очищена') }}><Trash2 size={16} /> Очистить историю</button></div>}</div>
         </header>
         {isSearching && <div className="conversation-search"><Search size={16} /><input autoFocus value={conversationQuery} onChange={(event) => setConversationQuery(event.target.value)} placeholder="Поиск в переписке" /><button onClick={() => { setIsSearching(false); setConversationQuery('') }} aria-label="Закрыть поиск"><X size={16} /></button></div>}
         <div className="messages-scroll">
@@ -238,7 +255,7 @@ function App() {
         </div>
         <footer className="composer">
           {pinnedVisible && <div className="pinned-note"><Pin size={14} fill="currentColor" /><span><strong>Закреплено</strong> Правила дома и контакты управляющей компании</span><button onClick={() => setPinnedVisible(false)} aria-label="Скрыть закреплённое сообщение"><X size={14} /></button></div>}
-          <div className="composer-row"><button className="icon-button" aria-label="Прикрепить" onClick={() => setOpenMenu(openMenu === 'attachment' ? null : 'attachment')}><Paperclip size={21} /></button>{openMenu === 'attachment' && <div className="context-menu attachment-menu"><button onClick={() => notify('Выберите фотографию для отправки')}><Image size={16} /> Фото</button><button onClick={() => notify('Выберите файл для отправки')}><FileText size={16} /> Файл</button><button onClick={() => notify('Опрос создан')}><Plus size={16} /> Опрос</button></div>}<textarea disabled={!sessionId || Boolean(gameOver)} value={draft} onChange={(event) => setDraft(event.target.value)} onKeyDown={(event) => { if (event.key === 'Enter' && !event.shiftKey) { event.preventDefault(); void sendMessage() } }} placeholder={gameOver ?? 'Написать сообщение...'} rows={1} /><button className="icon-button" aria-label="Смайлик" onClick={() => setDraft((current) => `${current}${current ? ' ' : ''}🙂`)}><Smile size={21} /></button><button className={`send-button ${draft.trim() ? 'send-button-active' : ''}`} onClick={() => void sendMessage()} aria-label="Отправить"><Send size={19} /></button></div>
+          <div className="composer-row"><button className="icon-button" aria-label="Прикрепить" onClick={() => setOpenMenu(openMenu === 'attachment' ? null : 'attachment')}><Paperclip size={21} /></button>{openMenu === 'attachment' && <div className="context-menu attachment-menu"><button onClick={() => notify('Выберите фотографию для отправки')}><Image size={16} /> Фото</button><button onClick={() => notify('Выберите файл для отправки')}><FileText size={16} /> Файл</button><button onClick={() => notify('Опрос создан')}><Plus size={16} /> Опрос</button></div>}<textarea disabled={!sessionId || Boolean(gameOver)} value={draft} onChange={(event) => setDraft(event.target.value)} onKeyDown={(event) => { if (event.key === 'Enter' && !event.shiftKey) { event.preventDefault(); void sendMessage() } }} placeholder={gameOver ?? 'Написать сообщение...'} rows={1} /><button className={`icon-button ${emojiOpen ? 'selected' : ''}`} aria-label="Смайлики" onClick={() => setEmojiOpen(!emojiOpen)}><Smile size={21} /></button>{emojiOpen && <div className="emoji-picker">{popularEmojis.map((emoji) => <button key={emoji} onClick={() => { setDraft((current) => `${current}${current ? ' ' : ''}${emoji}`); setEmojiOpen(false) }} aria-label={`Добавить ${emoji}`}>{emoji}</button>)}</div>}<button className={`send-button ${draft.trim() ? 'send-button-active' : ''}`} onClick={() => void sendMessage()} aria-label="Отправить"><Send size={19} /></button></div>
           <div className="composer-tools"><span>Enter — отправить</span><div><button aria-label="Добавить фото" onClick={() => notify('Выберите фотографию для отправки')}><Image size={16} /></button><button aria-label="Добавить геолокацию" onClick={() => notify('Геолокация добавлена к сообщению')}><MapPin size={16} /></button><button aria-label="Голосовое сообщение" onClick={() => notify('Запись голосового сообщения началась')}><Volume2 size={16} /></button></div></div>
         </footer>
       </section>
