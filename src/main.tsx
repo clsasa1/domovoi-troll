@@ -15,6 +15,8 @@ import {
   Search,
   Send,
   Smile,
+  Moon,
+  Sun,
   Volume2,
   X,
 } from 'lucide-react'
@@ -70,6 +72,10 @@ function Avatar({ initials, color, online = false, large = false }: { initials: 
 }
 
 function App() {
+  const [theme, setTheme] = useState<'dark' | 'light'>(() => {
+    const savedTheme = window.localStorage.getItem('domovoi-theme')
+    return savedTheme === 'light' ? 'light' : 'dark'
+  })
   const [messages, setMessages] = useState(initialMessages)
   const [draft, setDraft] = useState('')
   const [search, setSearch] = useState('')
@@ -97,6 +103,10 @@ function App() {
     () => residents.filter((person) => person.name.toLowerCase().includes(search.toLowerCase())),
     [search],
   )
+
+  useEffect(() => {
+    window.localStorage.setItem('domovoi-theme', theme)
+  }, [theme])
 
   const sendMessage = async () => {
     const text = draft.trim()
@@ -131,14 +141,20 @@ function App() {
   }
 
   return (
-    <main className="app-shell">
+    <main className={`app-shell theme-${theme}`}>
       <aside className="sidebar">
         <header className="sidebar-header">
           <div className="brand">
-            <div className="brand-mark"><MessageCircle size={18} fill="white" /></div>
-            <span>Домовой</span>
+            <button className="menu-button" aria-label="Открыть меню"><span /><span /><span /></button>
+            <div className="brand-mark"><MessageCircle size={17} fill="white" /></div>
+            <span>VK Мессенджер</span>
           </div>
-          <button className="icon-button" aria-label="Настройки"><MoreHorizontal size={20} /></button>
+          <div className="header-actions">
+            <button className="icon-button" aria-label="Переключить тему" onClick={() => setTheme(theme === 'dark' ? 'light' : 'dark')}>
+              {theme === 'dark' ? <Sun size={18} /> : <Moon size={18} />}
+            </button>
+            <button className="icon-button" aria-label="Настройки"><MoreHorizontal size={20} /></button>
+          </div>
         </header>
         <div className="search-box">
           <Search size={17} />
