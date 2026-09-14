@@ -111,7 +111,10 @@ function localDirectorFallback(text: string, recentMessages: ChatLogEntry[], cha
   }
 }
 
-function localActorFallback(actorId: string, text: string, recentMessages: ChatLogEntry[]): string {
+function localActorFallback(actorId: string, text: string, recentMessages: ChatLogEntry[], chatId?: string): string {
+  if (chatId === 'parking' && actorId === 'sergey_drill') {
+    return 'Я уже сказал, переставляю. Только без фотографий моей машины в общий чат, договорились?'
+  }
   const context = recentMessages.at(-1)?.text ?? text
   if (actorId === 'sergey_drill') return /парков|машин|мест|киа|эвакуатор/i.test(context)
     ? 'Я уже сказал, переставляю. Только без фотографий моей машины в общий чат, договорились?'
@@ -204,12 +207,12 @@ export async function handleGameMessage(input: unknown): Promise<{ state: Sessio
   try {
     const text = process.env.ARIONHUB_API_KEY
       ? await withTimeout(callActor(npc, decision.actorDirective), 12_000)
-      : localActorFallback(npc.id, request.text, session.messages)
+      : localActorFallback(npc.id, request.text, session.messages, request.chatId)
     const npcMessage: ChatLogEntry = { authorId: npc.id, authorName: npc.name, text, createdAt: Date.now() }
     session.messages.push(npcMessage)
     events.push({ type: 'npc_message', actorId: npc.id, text, delayMs }, { type: 'typing_stop', actorId: npc.id })
   } catch {
-    const text = localActorFallback(npc.id, request.text, session.messages)
+    const text = localActorFallback(npc.id, request.text, session.messages, request.chatId)
     const npcMessage: ChatLogEntry = { authorId: npc.id, authorName: npc.name, text, createdAt: Date.now() }
     session.messages.push(npcMessage)
     events.push({ type: 'npc_message', actorId: npc.id, text, delayMs }, { type: 'typing_stop', actorId: npc.id })
