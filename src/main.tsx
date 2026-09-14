@@ -21,6 +21,7 @@ import {
   Settings,
   SlidersHorizontal,
   Users,
+  LogOut,
   Moon,
   Sun,
   Volume2,
@@ -100,6 +101,13 @@ const chatMessages: Record<string, Message[]> = {
 const popularEmojis = ['🙂', '😂', '👍', '❤️', '🔥', '😡', '😢', '🤔', '👏', '👀']
 const messageReactions = ['👍', '😂', '❤️', '🔥', '😡', '🤔']
 const STORAGE_KEY = 'domovoi-chat-state-v1'
+const ACCOUNT_STORAGE_KEY = 'domovoi-account-v1'
+
+const accounts = [
+  { id: 'account-1', name: 'Александр Зайцев', subtitle: 'квартира 48 · основной аккаунт', initials: 'АЗ', color: 'blue', lastSeen: 'сейчас' },
+  { id: 'account-2', name: 'Екатерина Орлова', subtitle: 'квартира 72 · соседка', initials: 'ЕО', color: 'rose', lastSeen: 'вчера в 21:40' },
+  { id: 'account-3', name: 'Максим Воронцов', subtitle: 'квартира 31 · новый профиль', initials: 'МВ', color: 'violet', lastSeen: 'никогда' },
+]
 
 type PersistedChatState = {
   chats: typeof initialChats
@@ -127,6 +135,19 @@ function Avatar({ initials, color, online = false, large = false }: { initials: 
   return <span className={`avatar avatar-${color} ${large ? 'avatar-large' : ''}`}>{initials}<>{online && <i className="online-dot" />}</></span>
 }
 
+function LoginScreen({ theme, onThemeChange, onLogin }: { theme: 'dark' | 'light'; onThemeChange: () => void; onLogin: (accountId: string) => void }) {
+  return <main className={`login-shell theme-${theme}`}>
+    <section className="login-card">
+      <div className="login-brand"><div className="brand-mark"><MessageCircle size={22} fill="white" /></div><strong>VK Мессенджер</strong></div>
+      <div className="login-heading"><h1>Кто сегодня в чате?</h1><p>Выберите игровой аккаунт, чтобы войти в домовом чате</p></div>
+      <div className="account-list">{accounts.map((account) => <button className="account-option" key={account.id} onClick={() => onLogin(account.id)}><Avatar initials={account.initials} color={account.color} large /><span><strong>{account.name}</strong><small>{account.subtitle}</small><em>Последний вход: {account.lastSeen}</em></span><span className="account-arrow">›</span></button>)}</div>
+      <button className="create-account" onClick={() => onLogin(`account-${Date.now()}`)}><span>＋</span> Создать новый аккаунт</button>
+      <button className="login-theme" onClick={onThemeChange}>{theme === 'dark' ? '☀ Светлая тема' : '☾ Тёмная тема'}</button>
+      <small className="login-disclaimer">Это игровое пространство. Аккаунты вымышленные и хранятся только в этом браузере.</small>
+    </section>
+  </main>
+}
+
 const wait = (milliseconds: number) => new Promise<void>((resolve) => window.setTimeout(resolve, milliseconds))
 
 function App() {
@@ -135,6 +156,7 @@ function App() {
     const savedTheme = window.localStorage.getItem('domovoi-theme')
     return savedTheme === 'light' ? 'light' : 'dark'
   })
+  const [accountId, setAccountId] = useState(() => window.localStorage.getItem(ACCOUNT_STORAGE_KEY))
   const [messagesByChat, setMessagesByChat] = useState(persistedState.messagesByChat)
   const [draft, setDraft] = useState('')
   const [search, setSearch] = useState('')
@@ -190,6 +212,11 @@ function App() {
   const notify = (text: string) => {
     setToast(text)
     window.setTimeout(() => setToast(''), 2200)
+  }
+
+  const currentAccount = accounts.find((account) => account.id === accountId) ?? (accountId ? { id: accountId, name: 'Новый игрок', subtitle: 'новый игровой аккаунт', initials: 'Н', color: 'green', lastSeen: 'сейчас' } : undefined)
+  if (!currentAccount) {
+    return <LoginScreen theme={theme} onThemeChange={() => setTheme(theme === 'dark' ? 'light' : 'dark')} onLogin={(id) => { setAccountId(id); window.localStorage.setItem(ACCOUNT_STORAGE_KEY, id) }} />
   }
 
   const sendMessage = async () => {
@@ -262,8 +289,8 @@ function App() {
             </button>
           ))}
         </div>
-        <div className="sidebar-footer"><Avatar initials="ВЫ" color="green" online large /><div><strong>Вы</strong><small><span className="network-dot" /> в сети</small></div><button className="icon-button" aria-label="Меню профиля" onClick={() => setOpenMenu(openMenu === 'profile' ? null : 'profile')}><MoreHorizontal size={19} /></button>
-          {openMenu === 'profile' && <div className="context-menu profile-menu"><button onClick={() => notify('Профиль игрока открыт')}>Мой профиль</button><button onClick={() => setTheme(theme === 'dark' ? 'light' : 'dark')}>{theme === 'dark' ? 'Светлая тема' : 'Тёмная тема'}</button></div>}
+        <div className="sidebar-footer"><Avatar initials={currentAccount.initials} color={currentAccount.color} online large /><div><strong>{currentAccount.name}</strong><small><span className="network-dot" /> в сети</small></div><button className="icon-button" aria-label="Меню профиля" onClick={() => setOpenMenu(openMenu === 'profile' ? null : 'profile')}><MoreHorizontal size={19} /></button>
+          {openMenu === 'profile' && <div className="context-menu profile-menu"><button onClick={() => notify('Профиль игрока открыт')}>Мой профиль</button><button onClick={() => setTheme(theme === 'dark' ? 'light' : 'dark')}>{theme === 'dark' ? 'Светлая тема' : 'Тёмная тема'}</button><button onClick={() => { setAccountId(null); window.localStorage.removeItem(ACCOUNT_STORAGE_KEY) }}><LogOut size={16} /> Выйти из аккаунта</button></div>}
         </div>
       </aside>
 
