@@ -41,18 +41,13 @@ type Message = {
   attachment?: boolean
 }
 
-type GameEvent =
-  | { type: 'playerMessage'; message: { text: string } }
-  | { type: 'typing_start'; actorId: string; delayMs: number }
-  | { type: 'npc_message'; actorId: string; text: string; delayMs: number }
-  | { type: 'typing_stop'; actorId: string }
-  | { type: 'system_event'; text?: string; event: string }
-  | { type: 'game_over'; status: string }
-
-type GameResponse = {
-  sessionId?: string
-  state: { tension: number; suspicion: number; sessionStatus: string }
-  events: GameEvent[]
+type ActionResponse = {
+  actorId: string
+  actorName: string
+  messageText: string
+  tensionDelta: number
+  suspicionDelta: number
+  recommendedDelayMs: number
 }
 
 type MenuName = 'settings' | 'header' | 'profile' | 'attachment' | null
@@ -146,7 +141,6 @@ function App() {
   const [isSearching, setIsSearching] = useState(false)
   const [chats, setChats] = useState(persistedState.chats)
   const [selectedChatId, setSelectedChatId] = useState('north')
-  const [sessionId, setSessionId] = useState<string>()
   const [typingActor, setTypingActor] = useState<string>()
   const [metrics, setMetrics] = useState({ tension: 0, suspicion: 0 })
   const [gameOver, setGameOver] = useState<string>()
@@ -167,19 +161,6 @@ function App() {
     setSelectedChatId(chatId)
     setChats((current) => current.map((chat) => chat.id === chatId ? { ...chat, unread: 0 } : chat))
   }
-
-  useEffect(() => {
-    void fetch('/domovoi/api/game/start', { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: '{}' })
-      .then(async (response) => {
-        if (!response.ok) throw new Error('Не удалось начать игру')
-        return response.json() as Promise<GameResponse>
-      })
-      .then((result) => {
-        if (result.sessionId) setSessionId(result.sessionId)
-        setMetrics({ tension: result.state.tension, suspicion: result.state.suspicion })
-      })
-      .catch(() => setGameOver('Сервер игры недоступен'))
-  }, [])
 
   const visibleChats = useMemo(
     () => chats.filter((chat) => `${chat.title} ${chat.preview}`.toLowerCase().includes(search.toLowerCase())),
@@ -211,68 +192,37 @@ function App() {
     window.setTimeout(() => setToast(''), 2200)
   }
 
-  const processGameEvents = async (events: GameEvent[], chatId: string) => {
-    for (const event of events) {
-      if (event.type === 'playerMessage') continue
-      if (event.type === 'typing_start') {
-        setTypingActor(event.actorId)
-        await wait(event.delayMs)
-        continue
-      }
-      if (event.type === 'npc_message') {
-        setTypingActor(undefined)
-        setMessagesByChat((current) => ({ ...current, [chatId]: [...(current[chatId] ?? []), { id: Date.now() + Math.random(), author: event.actorId, initials: event.actorId.slice(0, 2).toUpperCase(), color: 'blue', text: event.text, time: 'сейчас' }] }))
-        if (Math.random() > 0.35) {
-          await wait(3000 + Math.floor(Math.random() * 4000))
-          setMessagesByChat((current) => {
-            const chatMessages = current[chatId] ?? []
-            const lastMine = [...chatMessages].reverse().findIndex((message) => message.mine)
-            if (lastMine === -1) return current
-            const index = chatMessages.length - 1 - lastMine
-            const message = chatMessages[index]
-            const reactions = message.reactions ? `${message.reactions} · 👍` : '👍 1'
-            return { ...current, [chatId]: chatMessages.map((item, itemIndex) => itemIndex === index ? { ...item, reactions } : item) }
-          })
-        }
-        continue
-      }
-      if (event.type === 'typing_stop') {
-        setTypingActor(undefined)
-        continue
-      }
-      if (event.type === 'system_event' && event.text) {
-        await wait(2000 + Math.floor(Math.random() * 2000))
-        setMessagesByChat((current) => ({ ...current, [chatId]: [...(current[chatId] ?? []), { id: Date.now() + Math.random(), author: 'Система', initials: '!', color: 'amber', text: event.text!, time: 'сейчас' }] }))
-        continue
-      }
-      if (event.type === 'game_over') {
-        setGameOver(event.status)
-      }
-    }
-  }
-
   const sendMessage = async () => {
     const text = draft.trim()
     const chatId = selectedChatId
-    if (!text || !sessionId || gameOver) return
+    if (!text || gameOver) return
     setMessagesByChat((current) => ({ ...current, [selectedChatId]: [...(current[selectedChatId] ?? []), { id: Date.now(), author: 'Вы', initials: 'ВЫ', color: 'green', text, time: 'сейчас', mine: true }] }))
     setDraft('')
     try {
-      const response = await fetch('/domovoi/api/game/message', {
+      const response = await fetch('/domovoi/api/chat/action', {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify({
-          sessionId,
-          chatId: selectedChatId,
-          text,
-          contextMessages: messages.slice(-15).map((message) => ({ authorId: message.author, text: message.text })),
-          messageType: 'text',
+          recentMessages: messages.slice(-15).map((message) => ({
+            id: String(message.id),
+            author: message.author,
+            text: message.text,
+          })),
+          currentTension: metrics.tension,
+          currentSuspicion: metrics.suspicion,
+          lastPlayerMessage: text,
         }),
       })
       if (!response.ok) throw new Error('Game API request failed')
-      const result = await response.json() as GameResponse
-      setMetrics({ tension: result.state.tension, suspicion: result.state.suspicion })
-      void processGameEvents(result.events, chatId)
+      const result = await response.json() as ActionResponse
+      setMetrics((current) => ({
+        tension: Math.max(0, Math.min(100, current.tension + result.tensionDelta)),
+        suspicion: Math.max(0, Math.min(100, current.suspicion + result.suspicionDelta)),
+      }))
+      setTypingActor(result.actorName)
+      await wait(Math.max(4000, Math.min(12_000, result.recommendedDelayMs)))
+      setTypingActor(undefined)
+      setMessagesByChat((current) => ({ ...current, [chatId]: [...(current[chatId] ?? []), { id: Date.now() + Math.random(), author: result.actorName, initials: result.actorName.slice(0, 2).toUpperCase(), color: 'blue', text: result.messageText, time: 'сейчас' }] }))
     } catch {
       setMessagesByChat((current) => ({ ...current, [selectedChatId]: [...(current[selectedChatId] ?? []), { id: Date.now(), author: 'Система', initials: '!', color: 'amber', text: 'Сервер не ответил. Попробуйте ещё раз.', time: 'сейчас' }] }))
     }
@@ -343,7 +293,7 @@ function App() {
         </div>
         <footer className="composer">
           {pinnedVisible && <div className="pinned-note"><Pin size={14} fill="currentColor" /><span><strong>Закреплено</strong> Правила дома и контакты управляющей компании</span><button onClick={() => setPinnedVisible(false)} aria-label="Скрыть закреплённое сообщение"><X size={14} /></button></div>}
-          <div className="composer-row"><button className="icon-button" aria-label="Прикрепить" onClick={() => setOpenMenu(openMenu === 'attachment' ? null : 'attachment')}><Paperclip size={21} /></button>{openMenu === 'attachment' && <div className="context-menu attachment-menu"><button onClick={() => notify('Выберите фотографию для отправки')}><Image size={16} /> Фото</button><button onClick={() => notify('Выберите файл для отправки')}><FileText size={16} /> Файл</button><button onClick={() => notify('Опрос создан')}><Plus size={16} /> Опрос</button></div>}<textarea disabled={!sessionId || Boolean(gameOver)} value={draft} onChange={(event) => setDraft(event.target.value)} onKeyDown={(event) => { if (event.key === 'Enter' && !event.shiftKey) { event.preventDefault(); void sendMessage() } }} placeholder={gameOver ?? 'Написать сообщение...'} rows={1} /><button className={`icon-button ${emojiOpen ? 'selected' : ''}`} aria-label="Смайлики" onClick={() => setEmojiOpen(!emojiOpen)}><Smile size={21} /></button>{emojiOpen && <div className="emoji-picker">{popularEmojis.map((emoji) => <button key={emoji} onClick={() => { setDraft((current) => `${current}${current ? ' ' : ''}${emoji}`); setEmojiOpen(false) }} aria-label={`Добавить ${emoji}`}>{emoji}</button>)}</div>}<button className={`send-button ${draft.trim() ? 'send-button-active' : ''}`} onClick={() => void sendMessage()} aria-label="Отправить"><Send size={19} /></button></div>
+          <div className="composer-row"><button className="icon-button" aria-label="Прикрепить" onClick={() => setOpenMenu(openMenu === 'attachment' ? null : 'attachment')}><Paperclip size={21} /></button>{openMenu === 'attachment' && <div className="context-menu attachment-menu"><button onClick={() => notify('Выберите фотографию для отправки')}><Image size={16} /> Фото</button><button onClick={() => notify('Выберите файл для отправки')}><FileText size={16} /> Файл</button><button onClick={() => notify('Опрос создан')}><Plus size={16} /> Опрос</button></div>}<textarea disabled={Boolean(gameOver)} value={draft} onChange={(event) => setDraft(event.target.value)} onKeyDown={(event) => { if (event.key === 'Enter' && !event.shiftKey) { event.preventDefault(); void sendMessage() } }} placeholder={gameOver ?? 'Написать сообщение...'} rows={1} /><button className={`icon-button ${emojiOpen ? 'selected' : ''}`} aria-label="Смайлики" onClick={() => setEmojiOpen(!emojiOpen)}><Smile size={21} /></button>{emojiOpen && <div className="emoji-picker">{popularEmojis.map((emoji) => <button key={emoji} onClick={() => { setDraft((current) => `${current}${current ? ' ' : ''}${emoji}`); setEmojiOpen(false) }} aria-label={`Добавить ${emoji}`}>{emoji}</button>)}</div>}<button className={`send-button ${draft.trim() ? 'send-button-active' : ''}`} onClick={() => void sendMessage()} aria-label="Отправить"><Send size={19} /></button></div>
           <div className="composer-tools"><span>Enter — отправить</span><div><button aria-label="Добавить фото" onClick={() => notify('Выберите фотографию для отправки')}><Image size={16} /></button><button aria-label="Добавить геолокацию" onClick={() => notify('Геолокация добавлена к сообщению')}><MapPin size={16} /></button><button aria-label="Голосовое сообщение" onClick={() => notify('Запись голосового сообщения началась')}><Volume2 size={16} /></button></div></div>
         </footer>
       </section>
