@@ -5,8 +5,6 @@ import { type DirectorInput } from '../llm/directorEngine'
 import {
   applyDirectorDelta,
   createSessionState,
-  generateSessionSummary,
-  type ChatLogEntry,
   type SessionState,
 } from '../stateEngine'
 import { getStaticNoise } from '../llm/staticNoise'
@@ -26,7 +24,9 @@ export type GameEvent =
   | { type: 'npc_message'; actorId: string; text: string; delayMs: number }
   | { type: 'typing_stop'; actorId: string }
   | { type: 'system_event'; event: 'impostor_triggered' | 'player_banned' | 'absolute_chaos'; targetNpcId?: string; text?: string }
-  | { type: 'game_over'; status: 'banned' | 'absolute_chaos'; summary: ReturnType<typeof generateSessionSummary> }
+  | { type: 'game_over'; status: 'banned' | 'absolute_chaos' }
+
+type ChatLogEntry = { authorId: string; authorName?: string; text: string; createdAt?: number }
 
 export type GameSession = {
   id: string
@@ -43,7 +43,7 @@ function createSession(): GameSession {
   const id = randomUUID()
   const session: GameSession = {
     id,
-    state: createSessionState({ reputationRegistry: Object.fromEntries(Object.keys(NPC_PROFILES).map((id) => [id, 0])) }),
+    state: createSessionState(Object.fromEntries(Object.keys(NPC_PROFILES).map((id) => [id, 0]))),
     messages: [],
     lastRequestAt: 0,
   }
@@ -87,7 +87,7 @@ export async function handleGameMessage(input: unknown): Promise<{ state: Sessio
   if (now - session.lastRequestAt < MIN_REQUEST_INTERVAL_MS) throw new Error('Too many requests')
   session.lastRequestAt = now
   if (session.state.sessionStatus !== 'active') {
-    return { state: session.state, events: [{ type: 'game_over', status: session.state.sessionStatus as 'banned' | 'absolute_chaos', summary: generateSessionSummary(session.state) }] }
+    return { state: session.state, events: [{ type: 'game_over', status: session.state.sessionStatus as 'banned' | 'absolute_chaos' }] }
   }
 
   const playerMessage: ChatLogEntry = { authorId: 'player', text: request.text, createdAt: now }
@@ -95,8 +95,7 @@ export async function handleGameMessage(input: unknown): Promise<{ state: Sessio
   const events = baseEvents(session, playerMessage)
   const impostorNpcId = findImpostorNpc(request.text)
   if (impostorNpcId) {
-    const result = applyDirectorDelta(session.state, { tensionDelta: 0, suspicionDelta: 20, now, playerWasActive: true, chatEntry: playerMessage })
-    session.state = result.state
+    session.state = applyDirectorDelta(session.state, { tensionDelta: 0, suspicionDelta: 20, now, playerWasActive: true })
     events.push({ type: 'system_event', event: 'impostor_triggered', targetNpcId: impostorNpcId })
   }
 
@@ -130,22 +129,22 @@ export async function handleGameMessage(input: unknown): Promise<{ state: Sessio
     return { state: session.state, events }
   }
 
-  const delta = applyDirectorDelta(session.state, {
+  const previousStatus = session.state.sessionStatus
+  session.state = applyDirectorDelta(session.state, {
     tensionDelta: decision.tensionDelta,
     suspicionDelta: decision.suspicionDelta,
     targetNpcId: decision.targetNpcId,
     now,
     playerWasActive: true,
   })
-  session.state = delta.state
-  if (delta.events.includes('player_banned')) {
+  if (previousStatus !== 'banned' && session.state.sessionStatus === 'banned') {
     events.push({ type: 'system_event', event: 'player_banned', text: 'Пользователь исключен из беседы' })
   }
-  if (delta.events.includes('absolute_chaos')) {
+  if (previousStatus !== 'absolute_chaos' && session.state.sessionStatus === 'absolute_chaos') {
     events.push({ type: 'system_event', event: 'absolute_chaos', text: 'Чат закрыт на сутки из-за спама и угроз участковым' })
   }
   if (session.state.sessionStatus !== 'active') {
-    events.push({ type: 'game_over', status: session.state.sessionStatus as 'banned' | 'absolute_chaos', summary: generateSessionSummary(session.state) })
+    events.push({ type: 'game_over', status: session.state.sessionStatus as 'banned' | 'absolute_chaos' })
     return { state: session.state, events }
   }
   if (decision.selectedActorId === 'none' || decision.actionType === 'ignore') return { state: session.state, events }

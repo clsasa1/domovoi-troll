@@ -1,4 +1,5 @@
 import {z} from 'zod'
 export const DirectorResponseSchema=z.object({selectedActorId:z.string().min(1),actionType:z.enum(['escalate','deescalate','call_admin','deflect_to_other_npc','ignore']),targetNpcId:z.string().nullable(),replyToMessageId:z.string().nullable(),tensionDelta:z.number().min(-15).max(20),suspicionDelta:z.number().min(-10).max(25),actorDirective:z.string().min(1),recommendedDelayMs:z.number().int().min(1500).max(6000)})
+export type DirectorResponse=z.infer<typeof DirectorResponseSchema>
 export const DIRECTOR_SYSTEM_PROMPT='Ты — циничный драматург и администратор конфликта в домовом чате. Поддерживай градус ругани, учитывай слабые точки игрока и онлайн NPC. При suspicion > 75 выбирай admin или активистку. Верни только валидный JSON.'
 export type DirectorInput={recentMessages:Array<{id:string;author:string;text:string;replyToId?:string|null}>;currentTension:number;currentSuspicion:number;activeNpcProfiles:unknown[];lastPlayerMessage:string}
