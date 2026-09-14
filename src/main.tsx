@@ -127,6 +127,11 @@ function App() {
   const selectedChat = chats.find((chat) => chat.id === selectedChatId) ?? chats[0]
   const messages = messagesByChat[selectedChatId] ?? []
 
+  const selectChat = (chatId: string) => {
+    setSelectedChatId(chatId)
+    setChats((current) => current.map((chat) => chat.id === chatId ? { ...chat, unread: 0 } : chat))
+  }
+
   useEffect(() => {
     void fetch('/domovoi/api/game/start', { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: '{}' })
       .then(async (response) => {
@@ -152,6 +157,10 @@ function App() {
   useEffect(() => {
     window.localStorage.setItem('domovoi-theme', theme)
   }, [theme])
+
+  useEffect(() => {
+    setChats((current) => current.map((chat) => chat.id === selectedChatId ? { ...chat, unread: 0 } : chat))
+  }, [])
 
   const notify = (text: string) => {
     setToast(text)
@@ -215,7 +224,7 @@ function App() {
         <div className="sidebar-section-title">Чаты <button aria-label="Вступить в чат" onClick={() => { const newChat = { id: `river-${Date.now()}`, title: 'ЖК “Речной квартал”', preview: 'Новый чат · Добро пожаловать', time: 'сейчас', unread: 0, color: 'teal' }; setChats((current) => [...current, newChat]); setSelectedChatId(newChat.id); notify('Вы вступили в новый чат') }}><Plus size={16} /></button></div>
         <div className="chat-list">
           {visibleChats.map((chat) => (
-            <button className={`chat-card ${selectedChatId === chat.id ? 'chat-card-active' : ''}`} key={chat.id} onClick={() => setSelectedChatId(chat.id)}>
+            <button className={`chat-card ${selectedChatId === chat.id ? 'chat-card-active' : ''}`} key={chat.id} onClick={() => selectChat(chat.id)}>
               <div className={`building-avatar building-${chat.color}`}><div className="building-roof" /><div className="building-windows">▪▪<br />▪▪</div></div>
               <div className="chat-card-content">
                 <div className="chat-card-title"><strong>{chat.title}</strong><time>{chat.time}</time></div>
