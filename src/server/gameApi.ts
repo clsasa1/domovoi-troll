@@ -8,6 +8,7 @@ import {
   type SessionState,
 } from '../stateEngine'
 import { z } from 'zod'
+import { RESIDENT_PROFILES } from '../data/residentProfiles'
 
 export const StartGameSchema = z.object({}).strict()
 export const GameMessageSchema = z.object({
@@ -59,11 +60,10 @@ function findImpostorNpc(text: string): string | undefined {
   const match = text.match(APARTMENT_PATTERN)
   if (!match) return undefined
   const apartment = Number(match[1])
-  const apartments: Record<string, number> = {
-    ludmila: 48,
-    sergey_drill: 72,
-    natalya_activist: 31,
-  }
+  const apartments = Object.fromEntries(RESIDENT_PROFILES.map((resident) => [
+    resident.id === 'sergey' ? 'sergey_drill' : resident.id === 'natalya' ? 'natalya_activist' : resident.id,
+    Number(resident.apartment.replace(/\D/g, '')),
+  ]))
   return Object.entries(apartments).find(([, number]) => number === apartment)?.[0]
 }
 

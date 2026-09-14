@@ -25,8 +25,15 @@ async function readBody(request: IncomingMessage): Promise<unknown> {
 const server = createServer(async (request, response) => {
   if (request.method === 'OPTIONS') return sendJson(response, 204, {})
   try {
-    if (request.method === 'GET' && request.url === '/domovoi/api/health') {
-      return sendJson(response, 200, { ok: true })
+    if (request.method === 'GET' && (request.url === '/healthz' || request.url === '/domovoi/api/healthz' || request.url === '/domovoi/api/health')) {
+      return sendJson(response, 200, {
+        ok: true,
+        configured: Boolean(process.env.ARIONHUB_API_KEY),
+        models: {
+          director: 'china-gpt-5.6-luna',
+          actor: 'grok-4.6',
+        },
+      })
     }
     if (request.method === 'POST' && request.url === '/domovoi/api/game/start') {
       const input = StartGameSchema.parse(await readBody(request))
@@ -45,5 +52,5 @@ const server = createServer(async (request, response) => {
 })
 
 server.listen(PORT, () => {
-  console.log(`Domovoi game API listening on http://localhost:${PORT}/domovoi/api/health`)
+  console.log(`Domovoi game API listening on http://localhost:${PORT}/healthz`)
 })

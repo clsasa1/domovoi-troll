@@ -8,12 +8,12 @@ import {
   FileText,
   Image,
   MapPin,
-  MessageCircle,
   MoreHorizontal,
   Paperclip,
   Pencil,
   Pin,
   Plus,
+  UserPlus,
   Trash2,
   Search,
   Send,
@@ -23,12 +23,14 @@ import {
   Users,
   LogOut,
   Moon,
+  Bot,
   Sun,
   Volume2,
   X,
 } from 'lucide-react'
 import { createRoot } from 'react-dom/client'
 import './styles.css'
+import { RESIDENT_PROFILES } from './data/residentProfiles'
 
 type Message = {
   id: number
@@ -42,6 +44,10 @@ type Message = {
   attachment?: boolean
 }
 
+const avatarByName: Record<string, string> = Object.fromEntries(
+  RESIDENT_PROFILES.filter((resident) => resident.avatar).map((resident) => [resident.name, resident.avatar!]),
+)
+
 type ActionResponse = {
   actorId: string
   actorName: string
@@ -51,21 +57,25 @@ type ActionResponse = {
   recommendedDelayMs: number
 }
 
-type MenuName = 'settings' | 'header' | 'profile' | 'attachment' | null
+type MenuName = 'main' | 'join' | 'settings' | 'header' | 'profile' | 'attachment' | null
 
-const residents = [
-  { name: 'Марина Петрова', role: 'Председатель совета дома', status: 'в сети', initials: 'МП', color: 'rose' },
-  { name: 'Илья Кузнецов', role: 'был в сети 15 минут назад', initials: 'ИК', color: 'blue' },
-  { name: 'Ольга Соколова', role: 'в сети', initials: 'ОС', color: 'violet' },
-  { name: 'Алексей Морозов', role: 'был в сети вчера', initials: 'АМ', color: 'amber' },
-  { name: 'Наталья Белова', role: 'в сети', initials: 'НБ', color: 'teal' },
-]
+const residents = RESIDENT_PROFILES.map((resident, index) => ({
+  ...resident,
+  role: `${resident.role} · ${resident.apartment}`,
+  status: index % 4 === 0 ? 'в сети' : resident.online,
+}))
 
 const initialChats = [
-  { id: 'north', title: 'ЖК “Северные Высоты” корп. 2', preview: 'Марина: Передам управляющей...', time: '10:55', unread: 3, color: 'blue' },
-  { id: 'sunny', title: 'ЖК “Солнечный берег”', preview: 'Илья: Лифт опять не работает', time: '09:42', unread: 7, color: 'amber' },
-  { id: 'parking', title: 'Парковка · Северные Высоты', preview: 'Наталья: Кто занял гостевое место?', time: 'Вчера', unread: 0, color: 'teal' },
+  { id: 'north', title: 'ЖК “Северные Высоты” корп. 2', preview: 'Марина: Передам управляющей...', time: '10:55', unread: 3, color: 'blue', image: 'assets/chats/north-heights.png' },
+  { id: 'sunny', title: 'ЖК “Солнечный берег”', preview: 'Илья: Лифт опять не работает', time: '09:42', unread: 7, color: 'amber', image: 'assets/chats/sunny-coast.png' },
+  { id: 'parking', title: 'Парковка · Северные Высоты', preview: 'Наталья: Кто занял гостевое место?', time: 'Вчера', unread: 0, color: 'teal', image: 'assets/chats/parking.png' },
 ]
+
+const chatLogoById: Record<string, string> = {
+  north: 'assets/chats/north-heights.png',
+  sunny: 'assets/chats/sunny-coast.png',
+  parking: 'assets/chats/parking.png',
+}
 
 const initialMessages: Message[] = [
   { id: 1, author: 'Марина Петрова', initials: 'МП', color: 'rose', text: 'Доброе утро, соседи! Напоминаю: сегодня с 11:00 будут проверять пожарную сигнализацию.', time: '10:42' },
@@ -104,9 +114,9 @@ const STORAGE_KEY = 'domovoi-chat-state-v1'
 const ACCOUNT_STORAGE_KEY = 'domovoi-account-v1'
 
 const accounts = [
-  { id: 'account-1', name: 'Александр Зайцев', subtitle: 'квартира 48 · основной аккаунт', initials: 'АЗ', color: 'blue', lastSeen: 'сейчас' },
-  { id: 'account-2', name: 'Екатерина Орлова', subtitle: 'квартира 72 · соседка', initials: 'ЕО', color: 'rose', lastSeen: 'вчера в 21:40' },
-  { id: 'account-3', name: 'Максим Воронцов', subtitle: 'квартира 31 · новый профиль', initials: 'МВ', color: 'violet', lastSeen: 'никогда' },
+  { id: 'account-1', name: 'Александр Зайцев', subtitle: 'квартира 48 · основной аккаунт', initials: 'АЗ', color: 'blue', avatar: 'assets/avatars/ilya-city.png', lastSeen: 'сейчас' },
+  { id: 'account-2', name: 'Екатерина Орлова', subtitle: 'квартира 72 · соседка', initials: 'ЕО', color: 'rose', avatar: 'assets/avatars/grandma.jpg', lastSeen: 'вчера в 21:40' },
+  { id: 'account-3', name: 'Максим Воронцов', subtitle: 'квартира 31 · новый профиль', initials: 'МВ', color: 'violet', avatar: 'assets/avatars/admin.jpg', lastSeen: 'никогда' },
 ]
 
 type PersistedChatState = {
@@ -123,7 +133,7 @@ function loadPersistedChatState(): PersistedChatState {
       return { chats: initialChats, messagesByChat: chatMessages }
     }
     return {
-      chats: parsed.chats,
+      chats: parsed.chats.map((chat) => ({ ...chat, image: chatLogoById[chat.id] ?? chat.image })),
       messagesByChat: parsed.messagesByChat,
     } as PersistedChatState
   } catch {
@@ -131,14 +141,18 @@ function loadPersistedChatState(): PersistedChatState {
   }
 }
 
-function Avatar({ initials, color, online = false, large = false }: { initials: string; color: string; online?: boolean; large?: boolean }) {
-  return <span className={`avatar avatar-${color} ${large ? 'avatar-large' : ''}`}>{initials}<>{online && <i className="online-dot" />}</></span>
+function Avatar({ initials, color, online = false, large = false, image, system = false }: { initials: string; color: string; online?: boolean; large?: boolean; image?: string; system?: boolean }) {
+  return <span className={`avatar avatar-${color} ${large ? 'avatar-large' : ''} ${image ? 'avatar-photo' : ''} ${system ? 'avatar-system' : ''}`} style={image ? { backgroundImage: `url("${image}")` } : undefined}>{system ? <Bot size={16} /> : !image && initials}{online && <i className="online-dot" />}</span>
+}
+
+function messageAvatar(message: Message): string | undefined {
+  return Object.entries(avatarByName).find(([name]) => message.author.includes(name))?.[1]
 }
 
 function LoginScreen({ theme, onThemeChange, onLogin }: { theme: 'dark' | 'light'; onThemeChange: () => void; onLogin: (accountId: string) => void }) {
   return <main className={`login-shell theme-${theme}`}>
     <section className="login-card">
-      <div className="login-brand"><div className="brand-mark"><MessageCircle size={22} fill="white" /></div><strong>VK Мессенджер</strong></div>
+      <div className="login-brand"><div className="brand-mark"><img src="assets/branding/vk-game-logo.png" alt="Логотип Домовой Тролль" /></div><strong>VK Мессенджер</strong></div>
       <div className="login-heading"><h1>Кто сегодня в чате?</h1><p>Выберите игровой аккаунт, чтобы войти в домовом чате</p></div>
       <div className="account-list">{accounts.map((account) => <button className="account-option" key={account.id} onClick={() => onLogin(account.id)}><Avatar initials={account.initials} color={account.color} large /><span><strong>{account.name}</strong><small>{account.subtitle}</small><em>Последний вход: {account.lastSeen}</em></span><span className="account-arrow">›</span></button>)}</div>
       <button className="create-account" onClick={() => onLogin(`account-${Date.now()}`)}><span>＋</span> Создать новый аккаунт</button>
@@ -184,6 +198,23 @@ function App() {
     setChats((current) => current.map((chat) => chat.id === chatId ? { ...chat, unread: 0 } : chat))
   }
 
+  const leaveChat = (chatId: string) => {
+    const remaining = chats.filter((chat) => chat.id !== chatId)
+    if (remaining.length === 0) {
+      notify('Нельзя выйти из последнего чата')
+      return
+    }
+    setChats(remaining)
+    setMessagesByChat((current) => {
+      const next = { ...current }
+      delete next[chatId]
+      return next
+    })
+    if (selectedChatId === chatId) setSelectedChatId(remaining[0].id)
+    setOpenMenu(null)
+    notify('Вы вышли из чата')
+  }
+
   const visibleChats = useMemo(
     () => chats.filter((chat) => `${chat.title} ${chat.preview}`.toLowerCase().includes(search.toLowerCase())),
     [chats, search],
@@ -214,7 +245,7 @@ function App() {
     window.setTimeout(() => setToast(''), 2200)
   }
 
-  const currentAccount = accounts.find((account) => account.id === accountId) ?? (accountId ? { id: accountId, name: 'Новый игрок', subtitle: 'новый игровой аккаунт', initials: 'Н', color: 'green', lastSeen: 'сейчас' } : undefined)
+  const currentAccount = accounts.find((account) => account.id === accountId) ?? (accountId ? { id: accountId, name: 'Новый игрок', subtitle: 'новый игровой аккаунт', initials: 'Н', color: 'green', avatar: undefined, lastSeen: 'сейчас' } : undefined)
   if (!currentAccount) {
     return <LoginScreen theme={theme} onThemeChange={() => setTheme(theme === 'dark' ? 'light' : 'dark')} onLogin={(id) => { setAccountId(id); window.localStorage.setItem(ACCOUNT_STORAGE_KEY, id) }} />
   }
@@ -260,9 +291,16 @@ function App() {
       <aside className="sidebar">
         <header className="sidebar-header">
           <div className="brand">
-            <button className="menu-button" aria-label="Открыть меню"><span /><span /><span /></button>
-            <div className="brand-mark"><MessageCircle size={17} fill="white" /></div>
+            <button className={`menu-button ${openMenu === 'main' ? 'selected' : ''}`} aria-label="Открыть меню" aria-expanded={openMenu === 'main'} onClick={() => setOpenMenu(openMenu === 'main' ? null : 'main')}><span /><span /><span /></button>
+            <div className="brand-mark"><img src="assets/branding/vk-game-logo.png" alt="Логотип Домовой Тролль" /></div>
             <span>VK Мессенджер</span>
+            {openMenu === 'main' && <div className="context-menu main-menu">
+              <div className="main-menu-account"><Avatar initials={currentAccount.initials} color={currentAccount.color} image={currentAccount.avatar} /><span><strong>{currentAccount.name}</strong><small>{currentAccount.subtitle}</small></span></div>
+              <button onClick={() => { notify('Профиль игрока открыт'); setOpenMenu(null) }}><Users size={16} /> Мой профиль</button>
+              <button onClick={() => { setSettingsOpen(true); setOpenMenu(null) }}><Settings size={16} /> Настройки игры</button>
+              <button onClick={() => { setTheme(theme === 'dark' ? 'light' : 'dark'); setOpenMenu(null) }}>{theme === 'dark' ? <Sun size={16} /> : <Moon size={16} />} {theme === 'dark' ? 'Светлая тема' : 'Тёмная тема'}</button>
+              <button onClick={() => { setAccountId(null); window.localStorage.removeItem(ACCOUNT_STORAGE_KEY); setOpenMenu(null) }}><LogOut size={16} /> Сменить аккаунт</button>
+            </div>}
           </div>
           <div className="header-actions">
             <button className="icon-button" aria-label="Переключить тему" onClick={() => setTheme(theme === 'dark' ? 'light' : 'dark')}>
@@ -277,11 +315,31 @@ function App() {
           {search && <button onClick={() => setSearch('')} aria-label="Очистить поиск"><X size={15} /></button>}
         </div>
         <div className="network-status"><span className="network-dot" /> Tension {metrics.tension} · Suspicion {metrics.suspicion}</div>
-        <div className="sidebar-section-title">Чаты <button aria-label="Вступить в чат" onClick={() => { const newChat = { id: `river-${Date.now()}`, title: 'ЖК “Речной квартал”', preview: 'Новый чат · Добро пожаловать', time: 'сейчас', unread: 0, color: 'teal' }; setChats((current) => [...current, newChat]); setSelectedChatId(newChat.id); notify('Вы вступили в новый чат') }}><Plus size={16} /></button></div>
+        <div className="sidebar-section-title">Чаты <button aria-label="Вступить в чат" aria-expanded={openMenu === 'join'} onClick={() => setOpenMenu(openMenu === 'join' ? null : 'join')}><Plus size={16} /></button>
+          {openMenu === 'join' && <div className="context-menu join-menu">
+            <strong>Вступить в чат</strong>
+            <button onClick={() => {
+              const newChat = { id: `river-${Date.now()}`, title: 'ЖК “Речной квартал”', preview: 'Новый чат · Добро пожаловать', time: 'сейчас', unread: 0, color: 'teal', image: 'assets/chats/river-quarter.png' }
+              const existing = chats.find((chat) => chat.title === newChat.title)
+              if (existing) {
+                setSelectedChatId(existing.id)
+                notify('Вы уже состоите в «Речном квартале»')
+              } else {
+                setChats((current) => [...current, newChat])
+                setSelectedChatId(newChat.id)
+                notify('Вы вступили в «Речной квартал»')
+              }
+              setOpenMenu(null)
+            }}><UserPlus size={16} /> ЖК «Речной квартал»</button>
+            <button onClick={() => { setOpenMenu(null); notify('Других доступных чатов пока нет') }}><Plus size={16} /> Найти другой чат</button>
+          </div>}
+        </div>
         <div className="chat-list">
           {visibleChats.map((chat) => (
             <button className={`chat-card ${selectedChatId === chat.id ? 'chat-card-active' : ''}`} key={chat.id} onClick={() => selectChat(chat.id)}>
-              <div className={`building-avatar building-${chat.color}`}><div className="building-roof" /><div className="building-windows">▪▪<br />▪▪</div></div>
+              <div className={`building-avatar building-${chat.color} ${chat.image ? 'building-photo' : ''}`}>
+                {chat.image ? <img src={chat.image} alt={`Логотип ${chat.title}`} /> : <><div className="building-roof" /><div className="building-windows">▪▪<br />▪▪</div></>}
+              </div>
               <div className="chat-card-content">
                 <div className="chat-card-title"><strong>{chat.title}</strong><time>{chat.time}</time></div>
                 <div className="chat-card-preview"><span>{chat.preview}</span>{chat.unread > 0 && <b>{chat.unread}</b>}</div>
@@ -289,15 +347,15 @@ function App() {
             </button>
           ))}
         </div>
-        <div className="sidebar-footer"><Avatar initials={currentAccount.initials} color={currentAccount.color} online large /><div><strong>{currentAccount.name}</strong><small><span className="network-dot" /> в сети</small></div><button className="icon-button" aria-label="Меню профиля" onClick={() => setOpenMenu(openMenu === 'profile' ? null : 'profile')}><MoreHorizontal size={19} /></button>
+        <div className="sidebar-footer"><Avatar initials={currentAccount.initials} color={currentAccount.color} online large image={currentAccount.avatar} /><div><strong>{currentAccount.name}</strong><small><span className="network-dot" /> в сети</small></div><button className="icon-button" aria-label="Меню профиля" onClick={() => setOpenMenu(openMenu === 'profile' ? null : 'profile')}><MoreHorizontal size={19} /></button>
           {openMenu === 'profile' && <div className="context-menu profile-menu"><button onClick={() => notify('Профиль игрока открыт')}>Мой профиль</button><button onClick={() => setTheme(theme === 'dark' ? 'light' : 'dark')}>{theme === 'dark' ? 'Светлая тема' : 'Тёмная тема'}</button><button onClick={() => { setAccountId(null); window.localStorage.removeItem(ACCOUNT_STORAGE_KEY) }}><LogOut size={16} /> Выйти из аккаунта</button></div>}
         </div>
       </aside>
 
       <section className="conversation">
         <header className="conversation-header">
-          <div className="conversation-title"><div className={`building-avatar small building-${selectedChat.color}`}><div className="building-roof" /><div className="building-windows">▪▪<br />▪▪</div></div><div><h1>{selectedChat.title}</h1><p><span className="online-text">●</span> 42 участника, 6 онлайн</p></div></div>
-          <div className="header-actions"><button className={`icon-button ${infoOpen ? 'selected' : ''}`} aria-label="Участники чата" onClick={() => setInfoOpen(!infoOpen)}><Users size={19} /></button><button className={`icon-button ${isSearching ? 'selected' : ''}`} onClick={() => setIsSearching(!isSearching)} aria-label="Поиск по диалогу"><Search size={20} /></button><button className={`icon-button ${notificationsEnabled ? '' : 'selected'}`} aria-label="Уведомления" onClick={() => { setNotificationsEnabled(!notificationsEnabled); notify(notificationsEnabled ? 'Уведомления выключены' : 'Уведомления включены') }}>{notificationsEnabled ? <Bell size={20} /> : <BellOff size={20} />}</button><button className="icon-button" aria-label="Меню" onClick={() => setOpenMenu(openMenu === 'header' ? null : 'header')}><MoreHorizontal size={21} /></button>{openMenu === 'header' && <div className="context-menu header-menu"><button onClick={() => { setSettingsOpen(true); setOpenMenu(null) }}><Settings size={16} /> Настройки игры</button><button onClick={() => notify('Чат архивирован')}><Archive size={16} /> Архивировать</button><button onClick={() => setPinnedVisible(!pinnedVisible)}><Pin size={16} /> {pinnedVisible ? 'Скрыть закрепление' : 'Показать закрепление'}</button><button className="danger" onClick={() => { setMessagesByChat((current) => ({ ...current, [selectedChatId]: [] })); notify('История чата очищена') }}><Trash2 size={16} /> Очистить историю</button></div>}</div>
+          <div className="conversation-title"><div className={`building-avatar small building-${selectedChat.color} ${selectedChat.image ? 'building-photo' : ''}`}>{selectedChat.image ? <img src={selectedChat.image} alt={`Логотип ${selectedChat.title}`} /> : <><div className="building-roof" /><div className="building-windows">▪▪<br />▪▪</div></>}</div><div><h1>{selectedChat.title}</h1><p><span className="online-text">●</span> 42 участника, 6 онлайн</p></div></div>
+          <div className="header-actions"><button className={`icon-button ${infoOpen ? 'selected' : ''}`} aria-label="Участники чата" onClick={() => setInfoOpen(!infoOpen)}><Users size={19} /></button><button className={`icon-button ${isSearching ? 'selected' : ''}`} onClick={() => setIsSearching(!isSearching)} aria-label="Поиск по диалогу"><Search size={20} /></button><button className={`icon-button ${notificationsEnabled ? '' : 'selected'}`} aria-label="Уведомления" onClick={() => { setNotificationsEnabled(!notificationsEnabled); notify(notificationsEnabled ? 'Уведомления выключены' : 'Уведомления включены') }}>{notificationsEnabled ? <Bell size={20} /> : <BellOff size={20} />}</button><button className={`icon-button ${openMenu === 'header' ? 'selected' : ''}`} aria-label="Меню чата" onClick={() => setOpenMenu(openMenu === 'header' ? null : 'header')}><MoreHorizontal size={21} /></button>{openMenu === 'header' && <div className="context-menu header-menu"><strong>Меню чата</strong><button onClick={() => { setSettingsOpen(true); setOpenMenu(null) }}><Settings size={16} /> Настройки игры</button><button onClick={() => { setOpenMenu(null); notify('Чат добавлен в архив') }}><Archive size={16} /> Архивировать</button><button onClick={() => setPinnedVisible(!pinnedVisible)}><Pin size={16} /> {pinnedVisible ? 'Скрыть закрепление' : 'Показать закрепление'}</button><button className="danger" onClick={() => leaveChat(selectedChatId)}><LogOut size={16} /> Выйти из чата</button><button className="danger" onClick={() => { setMessagesByChat((current) => ({ ...current, [selectedChatId]: [] })); setOpenMenu(null); notify('История чата очищена') }}><Trash2 size={16} /> Удалить историю</button></div>}</div>
         </header>
         {isSearching && <div className="conversation-search"><Search size={16} /><input autoFocus value={conversationQuery} onChange={(event) => setConversationQuery(event.target.value)} placeholder="Поиск в переписке" /><button onClick={() => { setIsSearching(false); setConversationQuery('') }} aria-label="Закрыть поиск"><X size={16} /></button></div>}
         <div className="messages-scroll">
@@ -305,7 +363,7 @@ function App() {
           <div className="message-list">
             {visibleMessages.map((message, index) => (
               <div className={`message-row ${message.mine ? 'message-row-mine' : ''}`} key={message.id} onMouseLeave={() => setReactionMessageId(undefined)}>
-                {!message.mine && <Avatar initials={message.initials} color={message.color} />}
+                {!message.mine && <Avatar initials={message.initials} color={message.color} image={messageAvatar(message)} system={message.author === 'Система'} />}
                 <div className="message-body">
                   {!message.mine && (index === 0 || visibleMessages[index - 1]?.author !== message.author) && <div className="message-author">{message.author}</div>}
                   {message.attachment && <div className="attachment-card"><div className="attachment-icon"><FileText size={20} /></div><div><strong>Акт выполненных работ</strong><small>PDF · 1,2 МБ</small></div><button onClick={() => notify('Действия файла открыты')} aria-label="Действия файла"><ChevronDown size={17} /></button></div>}
@@ -316,7 +374,7 @@ function App() {
             ))}
           </div>
           {selectedChat.unread > 0 && <div className="unread-divider"><span>{selectedChat.unread} непрочитанных сообщения</span></div>}
-          {typingActor && <div className="typing"><Avatar initials={typingActor.slice(0, 2).toUpperCase()} color="violet" /><span>{typingActor} печатает</span><i /><i /><i /></div>}
+          {typingActor && <div className="typing"><Avatar initials={typingActor.slice(0, 2).toUpperCase()} color="violet" image={avatarByName[typingActor]} /><span>{typingActor} печатает</span><i /><i /><i /></div>}
         </div>
         <footer className="composer">
           {pinnedVisible && <div className="pinned-note"><Pin size={14} fill="currentColor" /><span><strong>Закреплено</strong> Правила дома и контакты управляющей компании</span><button onClick={() => setPinnedVisible(false)} aria-label="Скрыть закреплённое сообщение"><X size={14} /></button></div>}
@@ -324,7 +382,7 @@ function App() {
           <div className="composer-tools"><span>Enter — отправить</span><div><button aria-label="Добавить фото" onClick={() => notify('Выберите фотографию для отправки')}><Image size={16} /></button><button aria-label="Добавить геолокацию" onClick={() => notify('Геолокация добавлена к сообщению')}><MapPin size={16} /></button><button aria-label="Голосовое сообщение" onClick={() => notify('Запись голосового сообщения началась')}><Volume2 size={16} /></button></div></div>
         </footer>
       </section>
-      {infoOpen && <aside className="info-panel"><button className="info-close" onClick={() => setInfoOpen(false)} aria-label="Закрыть информацию"><X size={18} /></button><div className="info-building"><div className={`building-avatar building-${selectedChat.color} info-avatar`}><div className="building-roof" /><div className="building-windows">▪▪<br />▪▪</div></div><h2>{selectedChat.title}</h2><p>42 участника · 6 онлайн</p></div><div className="info-tabs"><button className="active">Участники</button><button>Медиа</button></div><div className="info-search"><Search size={15} /><input placeholder="Поиск жильца" /></div><div className="info-residents">{residents.map((resident) => <div className="info-resident" key={resident.name}><Avatar initials={resident.initials} color={resident.color} online={resident.role === 'в сети'} /><div><strong>{resident.name}</strong><small>{resident.role}</small></div></div>)}</div></aside>}
+      {infoOpen && <aside className="info-panel"><button className="info-close" onClick={() => setInfoOpen(false)} aria-label="Закрыть информацию"><X size={18} /></button><div className="info-building"><div className={`building-avatar building-${selectedChat.color} info-avatar ${selectedChat.image ? 'building-photo' : ''}`}>{selectedChat.image ? <img src={selectedChat.image} alt={`Логотип ${selectedChat.title}`} /> : <><div className="building-roof" /><div className="building-windows">▪▪<br />▪▪</div></>}</div><h2>{selectedChat.title}</h2><p>42 участника · 6 онлайн</p></div><div className="info-tabs"><button className="active">Участники</button><button>Медиа</button></div><div className="info-search"><Search size={15} /><input placeholder="Поиск жильца" /></div><div className="info-residents">{residents.map((resident) => <div className="info-resident" key={resident.name}><Avatar initials={resident.initials} color={resident.color} image={avatarByName[resident.name]} online={resident.role === 'в сети'} /><div><strong>{resident.name}</strong><small>{resident.role}</small></div></div>)}</div></aside>}
       {settingsOpen && <div className="modal-backdrop" role="presentation" onClick={() => setSettingsOpen(false)}><section className="game-settings" role="dialog" aria-modal="true" aria-labelledby="settings-title" onClick={(event) => event.stopPropagation()}><header><div><h2 id="settings-title">Настройки игры</h2><p>Управляйте правилами симуляции чата</p></div><button className="icon-button" onClick={() => setSettingsOpen(false)} aria-label="Закрыть настройки"><X size={20} /></button></header><label className="setting-row"><span><strong>Драматичный режим</strong><small>NPC чаще вступают в перепалки</small></span><input type="checkbox" checked={gameOptions.drama} onChange={(event) => setGameOptions({ ...gameOptions, drama: event.target.checked })} /></label><label className="setting-row"><span><strong>Фоновый шум</strong><small>Локальные реплики жильцов без вызова LLM</small></span><input type="checkbox" checked={gameOptions.autoNoise} onChange={(event) => setGameOptions({ ...gameOptions, autoNoise: event.target.checked })} /></label><label className="setting-row"><span><strong>Сложный режим</strong><small>Подозрительность растёт быстрее</small></span><input type="checkbox" checked={gameOptions.hardMode} onChange={(event) => setGameOptions({ ...gameOptions, hardMode: event.target.checked })} /></label><div className="settings-metrics"><div><span>Напряжение</span><b>{metrics.tension}</b></div><div><span>Подозрение</span><b>{metrics.suspicion}</b></div></div><button className="primary-button" onClick={() => { setSettingsOpen(false); notify('Настройки игры сохранены') }}>Сохранить</button></section></div>}
       {toast && <div className="toast">{toast}</div>}
     </main>
