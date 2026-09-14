@@ -141,7 +141,14 @@ export async function handleGameMessage(input: unknown): Promise<{ state: Sessio
 
   const playerMessage: ChatLogEntry = { authorId: 'player', text: request.text, createdAt: now }
   if (request.contextMessages?.length) {
-    session.messages = request.contextMessages.map((message) => ({ ...message, createdAt: now - 1 }))
+    const knownTexts = new Set(session.messages.map((message) => `${message.authorId}\u0000${message.text}`))
+    for (const message of request.contextMessages) {
+      const key = `${message.authorId}\u0000${message.text}`
+      if (!knownTexts.has(key)) {
+        session.messages.push({ ...message, createdAt: now - 1 })
+        knownTexts.add(key)
+      }
+    }
   }
   session.messages.push(playerMessage)
   const events = baseEvents(session, playerMessage)

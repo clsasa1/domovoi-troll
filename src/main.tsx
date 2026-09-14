@@ -104,6 +104,29 @@ const chatMessages: Record<string, Message[]> = {
 
 const popularEmojis = ['🙂', '😂', '👍', '❤️', '🔥', '😡', '😢', '🤔', '👏', '👀']
 const messageReactions = ['👍', '😂', '❤️', '🔥', '😡', '🤔']
+const STORAGE_KEY = 'domovoi-chat-state-v1'
+
+type PersistedChatState = {
+  chats: typeof initialChats
+  messagesByChat: Record<string, Message[]>
+}
+
+function loadPersistedChatState(): PersistedChatState {
+  const raw = window.localStorage.getItem(STORAGE_KEY)
+  if (!raw) return { chats: initialChats, messagesByChat: chatMessages }
+  try {
+    const parsed = JSON.parse(raw) as Partial<PersistedChatState>
+    if (!Array.isArray(parsed.chats) || !parsed.messagesByChat || typeof parsed.messagesByChat !== 'object') {
+      return { chats: initialChats, messagesByChat: chatMessages }
+    }
+    return {
+      chats: parsed.chats,
+      messagesByChat: parsed.messagesByChat,
+    } as PersistedChatState
+  } catch {
+    return { chats: initialChats, messagesByChat: chatMessages }
+  }
+}
 
 function Avatar({ initials, color, online = false, large = false }: { initials: string; color: string; online?: boolean; large?: boolean }) {
   return <span className={`avatar avatar-${color} ${large ? 'avatar-large' : ''}`}>{initials}<>{online && <i className="online-dot" />}</></span>
@@ -112,15 +135,16 @@ function Avatar({ initials, color, online = false, large = false }: { initials: 
 const wait = (milliseconds: number) => new Promise<void>((resolve) => window.setTimeout(resolve, milliseconds))
 
 function App() {
+  const [persistedState] = useState(loadPersistedChatState)
   const [theme, setTheme] = useState<'dark' | 'light'>(() => {
     const savedTheme = window.localStorage.getItem('domovoi-theme')
     return savedTheme === 'light' ? 'light' : 'dark'
   })
-  const [messagesByChat, setMessagesByChat] = useState(chatMessages)
+  const [messagesByChat, setMessagesByChat] = useState(persistedState.messagesByChat)
   const [draft, setDraft] = useState('')
   const [search, setSearch] = useState('')
   const [isSearching, setIsSearching] = useState(false)
-  const [chats, setChats] = useState(initialChats)
+  const [chats, setChats] = useState(persistedState.chats)
   const [selectedChatId, setSelectedChatId] = useState('north')
   const [sessionId, setSessionId] = useState<string>()
   const [typingActor, setTypingActor] = useState<string>()
@@ -169,6 +193,10 @@ function App() {
   useEffect(() => {
     window.localStorage.setItem('domovoi-theme', theme)
   }, [theme])
+
+  useEffect(() => {
+    window.localStorage.setItem(STORAGE_KEY, JSON.stringify({ chats, messagesByChat }))
+  }, [chats, messagesByChat])
 
   useEffect(() => {
     setChats((current) => {
