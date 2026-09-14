@@ -18,6 +18,9 @@ import {
   Search,
   Send,
   Smile,
+  Settings,
+  SlidersHorizontal,
+  Users,
   Moon,
   Sun,
   Volume2,
@@ -62,6 +65,12 @@ const residents = [
   { name: 'Наталья Белова', role: 'в сети', initials: 'НБ', color: 'teal' },
 ]
 
+const initialChats = [
+  { id: 'north', title: 'ЖК “Северные Высоты” корп. 2', preview: 'Марина: Передам управляющей...', time: '10:55', unread: 3, color: 'blue' },
+  { id: 'sunny', title: 'ЖК “Солнечный берег”', preview: 'Илья: Лифт опять не работает', time: '09:42', unread: 7, color: 'amber' },
+  { id: 'parking', title: 'Парковка · Северные Высоты', preview: 'Наталья: Кто занял гостевое место?', time: 'Вчера', unread: 0, color: 'teal' },
+]
+
 const initialMessages: Message[] = [
   { id: 1, author: 'Марина Петрова', initials: 'МП', color: 'rose', text: 'Доброе утро, соседи! Напоминаю: сегодня с 11:00 будут проверять пожарную сигнализацию.', time: '10:42' },
   { id: 2, author: 'Илья Кузнецов', initials: 'ИК', color: 'blue', text: 'А лифт при этом отключат? У меня доставка как раз на это время.', time: '10:44' },
@@ -85,7 +94,8 @@ function App() {
   const [draft, setDraft] = useState('')
   const [search, setSearch] = useState('')
   const [isSearching, setIsSearching] = useState(false)
-  const [selectedResident, setSelectedResident] = useState('ЖК “Северные Высоты” корп. 2')
+  const [chats, setChats] = useState(initialChats)
+  const [selectedChatId, setSelectedChatId] = useState('north')
   const [sessionId, setSessionId] = useState<string>()
   const [typingActor, setTypingActor] = useState<string>()
   const [metrics, setMetrics] = useState({ tension: 0, suspicion: 0 })
@@ -95,6 +105,10 @@ function App() {
   const [notificationsEnabled, setNotificationsEnabled] = useState(true)
   const [conversationQuery, setConversationQuery] = useState('')
   const [toast, setToast] = useState('')
+  const [settingsOpen, setSettingsOpen] = useState(false)
+  const [infoOpen, setInfoOpen] = useState(false)
+  const [gameOptions, setGameOptions] = useState({ drama: true, autoNoise: true, hardMode: false })
+  const selectedChat = chats.find((chat) => chat.id === selectedChatId) ?? chats[0]
 
   useEffect(() => {
     void fetch('/domovoi/api/game/start', { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: '{}' })
@@ -109,8 +123,8 @@ function App() {
       .catch(() => setGameOver('Сервер игры недоступен'))
   }, [])
 
-  const visibleResidents = useMemo(
-    () => residents.filter((person) => person.name.toLowerCase().includes(search.toLowerCase())),
+  const visibleChats = useMemo(
+    () => chats.filter((chat) => `${chat.title} ${chat.preview}`.toLowerCase().includes(search.toLowerCase())),
     [search],
   )
   const visibleMessages = useMemo(
@@ -172,8 +186,7 @@ function App() {
             <button className="icon-button" aria-label="Переключить тему" onClick={() => setTheme(theme === 'dark' ? 'light' : 'dark')}>
               {theme === 'dark' ? <Sun size={18} /> : <Moon size={18} />}
             </button>
-            <button className={`icon-button ${openMenu === 'settings' ? 'selected' : ''}`} aria-label="Настройки" onClick={() => setOpenMenu(openMenu === 'settings' ? null : 'settings')}><MoreHorizontal size={20} /></button>
-            {openMenu === 'settings' && <div className="context-menu settings-menu"><button onClick={() => notify('Настройки чата открыты')}>Настройки чата</button><button onClick={() => notify('Справка пока недоступна')}>Помощь</button></div>}
+            <button className={`icon-button ${settingsOpen ? 'selected' : ''}`} aria-label="Настройки игры" onClick={() => setSettingsOpen(true)}><Settings size={18} /></button>
           </div>
         </header>
         <div className="search-box">
@@ -182,21 +195,15 @@ function App() {
           {search && <button onClick={() => setSearch('')} aria-label="Очистить поиск"><X size={15} /></button>}
         </div>
         <div className="network-status"><span className="network-dot" /> Tension {metrics.tension} · Suspicion {metrics.suspicion}</div>
-        <div className="sidebar-section-title">Чаты <button aria-label="Создать чат" onClick={() => notify('Новый чат можно будет создать после выбора жильцов')}><Plus size={16} /></button></div>
-        <button className={`chat-card ${selectedResident.startsWith('ЖК') ? 'chat-card-active' : ''}`} onClick={() => setSelectedResident('ЖК “Северные Высоты” корп. 2')}>
-          <div className="building-avatar"><div className="building-roof" /><div className="building-windows">▪▪<br />▪▪</div></div>
-          <div className="chat-card-content">
-            <div className="chat-card-title"><strong>ЖК “Северные Высоты” корп. 2</strong><time>10:55</time></div>
-            <div className="chat-card-preview"><span>Марина: Записала. Передам управляющей...</span><b>3</b></div>
-          </div>
-        </button>
-        <div className="sidebar-section-title residents-title">Жильцы <span>42</span></div>
-        <div className="residents-list">
-          {visibleResidents.map((resident) => (
-            <button className="resident-row" key={resident.name} onClick={() => setSelectedResident(resident.name)}>
-              <Avatar initials={resident.initials} color={resident.color} online={resident.role === 'в сети'} />
-              <span className="resident-copy"><strong>{resident.name}</strong><small className={resident.role === 'в сети' ? 'is-online' : ''}>{resident.role}</small></span>
-              <MoreHorizontal size={16} className="resident-more" onClick={(event) => { event.stopPropagation(); notify(`Открыты действия для ${resident.name}`) }} />
+        <div className="sidebar-section-title">Чаты <button aria-label="Вступить в чат" onClick={() => { const newChat = { id: `river-${Date.now()}`, title: 'ЖК “Речной квартал”', preview: 'Новый чат · Добро пожаловать', time: 'сейчас', unread: 0, color: 'teal' }; setChats((current) => [...current, newChat]); setSelectedChatId(newChat.id); notify('Вы вступили в новый чат') }}><Plus size={16} /></button></div>
+        <div className="chat-list">
+          {visibleChats.map((chat) => (
+            <button className={`chat-card ${selectedChatId === chat.id ? 'chat-card-active' : ''}`} key={chat.id} onClick={() => setSelectedChatId(chat.id)}>
+              <div className={`building-avatar building-${chat.color}`}><div className="building-roof" /><div className="building-windows">▪▪<br />▪▪</div></div>
+              <div className="chat-card-content">
+                <div className="chat-card-title"><strong>{chat.title}</strong><time>{chat.time}</time></div>
+                <div className="chat-card-preview"><span>{chat.preview}</span>{chat.unread > 0 && <b>{chat.unread}</b>}</div>
+              </div>
             </button>
           ))}
         </div>
@@ -207,8 +214,8 @@ function App() {
 
       <section className="conversation">
         <header className="conversation-header">
-          <div className="conversation-title"><div className="building-avatar small"><div className="building-roof" /><div className="building-windows">▪▪<br />▪▪</div></div><div><h1>{selectedResident}</h1><p><span className="online-text">●</span> 42 участника, 6 онлайн</p></div></div>
-          <div className="header-actions"><button className={`icon-button ${isSearching ? 'selected' : ''}`} onClick={() => setIsSearching(!isSearching)} aria-label="Поиск по диалогу"><Search size={20} /></button><button className={`icon-button ${notificationsEnabled ? '' : 'selected'}`} aria-label="Уведомления" onClick={() => { setNotificationsEnabled(!notificationsEnabled); notify(notificationsEnabled ? 'Уведомления выключены' : 'Уведомления включены') }}>{notificationsEnabled ? <Bell size={20} /> : <BellOff size={20} />}</button><button className="icon-button" aria-label="Меню" onClick={() => setOpenMenu(openMenu === 'header' ? null : 'header')}><MoreHorizontal size={21} /></button>{openMenu === 'header' && <div className="context-menu header-menu"><button onClick={() => notify('Чат архивирован')}><Archive size={16} /> Архивировать</button><button onClick={() => setPinnedVisible(!pinnedVisible)}><Pin size={16} /> {pinnedVisible ? 'Скрыть закрепление' : 'Показать закрепление'}</button><button className="danger" onClick={() => { setMessages([]); notify('История чата очищена') }}><Trash2 size={16} /> Очистить историю</button></div>}</div>
+          <div className="conversation-title"><div className={`building-avatar small building-${selectedChat.color}`}><div className="building-roof" /><div className="building-windows">▪▪<br />▪▪</div></div><div><h1>{selectedChat.title}</h1><p><span className="online-text">●</span> 42 участника, 6 онлайн</p></div></div>
+          <div className="header-actions"><button className={`icon-button ${infoOpen ? 'selected' : ''}`} aria-label="Участники чата" onClick={() => setInfoOpen(!infoOpen)}><Users size={19} /></button><button className={`icon-button ${isSearching ? 'selected' : ''}`} onClick={() => setIsSearching(!isSearching)} aria-label="Поиск по диалогу"><Search size={20} /></button><button className={`icon-button ${notificationsEnabled ? '' : 'selected'}`} aria-label="Уведомления" onClick={() => { setNotificationsEnabled(!notificationsEnabled); notify(notificationsEnabled ? 'Уведомления выключены' : 'Уведомления включены') }}>{notificationsEnabled ? <Bell size={20} /> : <BellOff size={20} />}</button><button className="icon-button" aria-label="Меню" onClick={() => setOpenMenu(openMenu === 'header' ? null : 'header')}><MoreHorizontal size={21} /></button>{openMenu === 'header' && <div className="context-menu header-menu"><button onClick={() => { setSettingsOpen(true); setOpenMenu(null) }}><Settings size={16} /> Настройки игры</button><button onClick={() => notify('Чат архивирован')}><Archive size={16} /> Архивировать</button><button onClick={() => setPinnedVisible(!pinnedVisible)}><Pin size={16} /> {pinnedVisible ? 'Скрыть закрепление' : 'Показать закрепление'}</button><button className="danger" onClick={() => { setMessages([]); notify('История чата очищена') }}><Trash2 size={16} /> Очистить историю</button></div>}</div>
         </header>
         {isSearching && <div className="conversation-search"><Search size={16} /><input autoFocus value={conversationQuery} onChange={(event) => setConversationQuery(event.target.value)} placeholder="Поиск в переписке" /><button onClick={() => { setIsSearching(false); setConversationQuery('') }} aria-label="Закрыть поиск"><X size={16} /></button></div>}
         <div className="messages-scroll">
@@ -235,6 +242,8 @@ function App() {
           <div className="composer-tools"><span>Enter — отправить</span><div><button aria-label="Добавить фото" onClick={() => notify('Выберите фотографию для отправки')}><Image size={16} /></button><button aria-label="Добавить геолокацию" onClick={() => notify('Геолокация добавлена к сообщению')}><MapPin size={16} /></button><button aria-label="Голосовое сообщение" onClick={() => notify('Запись голосового сообщения началась')}><Volume2 size={16} /></button></div></div>
         </footer>
       </section>
+      {infoOpen && <aside className="info-panel"><button className="info-close" onClick={() => setInfoOpen(false)} aria-label="Закрыть информацию"><X size={18} /></button><div className="info-building"><div className={`building-avatar building-${selectedChat.color} info-avatar`}><div className="building-roof" /><div className="building-windows">▪▪<br />▪▪</div></div><h2>{selectedChat.title}</h2><p>42 участника · 6 онлайн</p></div><div className="info-tabs"><button className="active">Участники</button><button>Медиа</button></div><div className="info-search"><Search size={15} /><input placeholder="Поиск жильца" /></div><div className="info-residents">{residents.map((resident) => <div className="info-resident" key={resident.name}><Avatar initials={resident.initials} color={resident.color} online={resident.role === 'в сети'} /><div><strong>{resident.name}</strong><small>{resident.role}</small></div></div>)}</div></aside>}
+      {settingsOpen && <div className="modal-backdrop" role="presentation" onClick={() => setSettingsOpen(false)}><section className="game-settings" role="dialog" aria-modal="true" aria-labelledby="settings-title" onClick={(event) => event.stopPropagation()}><header><div><h2 id="settings-title">Настройки игры</h2><p>Управляйте правилами симуляции чата</p></div><button className="icon-button" onClick={() => setSettingsOpen(false)} aria-label="Закрыть настройки"><X size={20} /></button></header><label className="setting-row"><span><strong>Драматичный режим</strong><small>NPC чаще вступают в перепалки</small></span><input type="checkbox" checked={gameOptions.drama} onChange={(event) => setGameOptions({ ...gameOptions, drama: event.target.checked })} /></label><label className="setting-row"><span><strong>Фоновый шум</strong><small>Локальные реплики жильцов без вызова LLM</small></span><input type="checkbox" checked={gameOptions.autoNoise} onChange={(event) => setGameOptions({ ...gameOptions, autoNoise: event.target.checked })} /></label><label className="setting-row"><span><strong>Сложный режим</strong><small>Подозрительность растёт быстрее</small></span><input type="checkbox" checked={gameOptions.hardMode} onChange={(event) => setGameOptions({ ...gameOptions, hardMode: event.target.checked })} /></label><div className="settings-metrics"><div><span>Напряжение</span><b>{metrics.tension}</b></div><div><span>Подозрение</span><b>{metrics.suspicion}</b></div></div><button className="primary-button" onClick={() => { setSettingsOpen(false); notify('Настройки игры сохранены') }}>Сохранить</button></section></div>}
       {toast && <div className="toast">{toast}</div>}
     </main>
   )
