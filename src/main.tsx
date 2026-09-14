@@ -184,7 +184,13 @@ function App() {
       const response = await fetch('/domovoi/api/game/message', {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({ sessionId, text, messageType: 'text' }),
+        body: JSON.stringify({
+          sessionId,
+          chatId: selectedChatId,
+          text,
+          contextMessages: messages.slice(-15).map((message) => ({ authorId: message.author, text: message.text })),
+          messageType: 'text',
+        }),
       })
       if (!response.ok) throw new Error('Game API request failed')
       const result = await response.json() as GameResponse
