@@ -103,6 +103,7 @@ const chatMessages: Record<string, Message[]> = {
 }
 
 const popularEmojis = ['🙂', '😂', '👍', '❤️', '🔥', '😡', '😢', '🤔', '👏', '👀']
+const messageReactions = ['👍', '😂', '❤️', '🔥', '😡', '🤔']
 
 function Avatar({ initials, color, online = false, large = false }: { initials: string; color: string; online?: boolean; large?: boolean }) {
   return <span className={`avatar avatar-${color} ${large ? 'avatar-large' : ''}`}>{initials}<>{online && <i className="online-dot" />}</></span>
@@ -131,6 +132,7 @@ function App() {
   const [conversationQuery, setConversationQuery] = useState('')
   const [toast, setToast] = useState('')
   const [emojiOpen, setEmojiOpen] = useState(false)
+  const [reactionMessageId, setReactionMessageId] = useState<number>()
   const [settingsOpen, setSettingsOpen] = useState(false)
   const [infoOpen, setInfoOpen] = useState(false)
   const [gameOptions, setGameOptions] = useState({ drama: true, autoNoise: true, hardMode: false })
@@ -193,7 +195,7 @@ function App() {
         setTypingActor(undefined)
         setMessagesByChat((current) => ({ ...current, [chatId]: [...(current[chatId] ?? []), { id: Date.now() + Math.random(), author: event.actorId, initials: event.actorId.slice(0, 2).toUpperCase(), color: 'blue', text: event.text, time: 'сейчас' }] }))
         if (Math.random() > 0.35) {
-          await wait(700 + Math.floor(Math.random() * 1500))
+          await wait(3000 + Math.floor(Math.random() * 4000))
           setMessagesByChat((current) => {
             const chatMessages = current[chatId] ?? []
             const lastMine = [...chatMessages].reverse().findIndex((message) => message.mine)
@@ -211,7 +213,7 @@ function App() {
         continue
       }
       if (event.type === 'system_event' && event.text) {
-        await wait(500 + Math.floor(Math.random() * 900))
+        await wait(2000 + Math.floor(Math.random() * 2000))
         setMessagesByChat((current) => ({ ...current, [chatId]: [...(current[chatId] ?? []), { id: Date.now() + Math.random(), author: 'Система', initials: '!', color: 'amber', text: event.text!, time: 'сейчас' }] }))
         continue
       }
@@ -297,12 +299,12 @@ function App() {
           <div className="date-divider"><span>Сегодня</span></div>
           <div className="message-list">
             {visibleMessages.map((message, index) => (
-              <div className={`message-row ${message.mine ? 'message-row-mine' : ''}`} key={message.id}>
+              <div className={`message-row ${message.mine ? 'message-row-mine' : ''}`} key={message.id} onMouseLeave={() => setReactionMessageId(undefined)}>
                 {!message.mine && <Avatar initials={message.initials} color={message.color} />}
                 <div className="message-body">
                   {!message.mine && (index === 0 || visibleMessages[index - 1]?.author !== message.author) && <div className="message-author">{message.author}</div>}
                   {message.attachment && <div className="attachment-card"><div className="attachment-icon"><FileText size={20} /></div><div><strong>Акт выполненных работ</strong><small>PDF · 1,2 МБ</small></div><button onClick={() => notify('Действия файла открыты')} aria-label="Действия файла"><ChevronDown size={17} /></button></div>}
-                  <div className="bubble">{message.text}</div>
+                  <div className="bubble-wrap"><div className="bubble">{message.text}</div>{!message.mine && <button className="message-reaction-trigger" onClick={() => setReactionMessageId(reactionMessageId === message.id ? undefined : message.id)} aria-label="Поставить реакцию">☺</button>}{reactionMessageId === message.id && <div className="message-reaction-picker">{messageReactions.map((reaction) => <button key={reaction} onClick={() => { setMessagesByChat((current) => ({ ...current, [selectedChatId]: (current[selectedChatId] ?? []).map((item) => item.id === message.id ? { ...item, reactions: `${reaction} 1` } : item) })); setReactionMessageId(undefined) }} aria-label={`Поставить реакцию ${reaction}`}>{reaction}</button>)}</div>}</div>
                   <div className="message-meta">{message.time} {message.mine && <CheckCheck size={15} />} {message.reactions && <span className="reaction">{message.reactions}</span>}</div>
                 </div>
               </div>

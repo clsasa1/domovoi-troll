@@ -88,7 +88,7 @@ function localDirectorFallback(text: string, recentMessages: ChatLogEntry[], cha
       tensionDelta: 4,
       suspicionDelta: 0,
       actorDirective: 'Продолжи спор о гостевом парковочном месте и номере машины. Ответь Сергею по существу, но с раздражением; задай встречный вопрос.',
-      recommendedDelayMs: 2200,
+      recommendedDelayMs: 5500,
     }
   }
   const lowerText = `${recentMessages.map((message) => message.text).join(' ')} ${text}`.toLowerCase()
@@ -107,7 +107,7 @@ function localDirectorFallback(text: string, recentMessages: ChatLogEntry[], cha
     tensionDelta: 3,
     suspicionDelta: 0,
     actorDirective: `Ответь по контексту последних сообщений, продолжи конкретный бытовой спор. Не меняй тему и задай короткий уточняющий вопрос игроку.`,
-    recommendedDelayMs: 2200,
+    recommendedDelayMs: 5500,
   }
 }
 
